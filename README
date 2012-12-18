@@ -1,1 +1,19 @@
-Salão para o jogos de cartas
+Salão para jogos de cartas
+
+
+King
+-----
+
+As regras para o jogo podem ser lidas em
+<https://en.wikipedia.org/wiki/King_%28card_game%29>.
+
+Os arquivos do jogo podem ser descritos como:
+
+  + king.py :: Implementa as regras do jogo
+  + kingHallAgent.py :: Implementa o agente do Hall (este é o
+    ServerSide no momento)
+  + kingAgent.py :: Implementa o agente da Mesa, o HallAgent que
+    inicia este processo
+  + kingClient.py :: Um cliente que se conecta na primeira mesa que
+    encontra e joga cartas aleatórias (dentre as possíveis), só
+    precisa de um nome único na mesa, mas pode passar como parametro.
