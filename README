@@ -2,7 +2,7 @@ Salão para jogos de cartas
 
 
 King
------
+====
 
 As regras para o jogo podem ser lidas em
 <https://en.wikipedia.org/wiki/King_%28card_game%29>.
@@ -17,3 +17,9 @@ Os arquivos do jogo podem ser descritos como:
   + kingClient.py :: Um cliente que se conecta na primeira mesa que
     encontra e joga cartas aleatórias (dentre as possíveis), só
     precisa de um nome único na mesa, mas pode passar como parametro.
+
+Requerimentos Mínimos
+---------------------
+
+  + RabbitMQ :: v3.0
+  + Pika :: Biblioteca Python, v0.9.8
