@@ -5,6 +5,7 @@ import os
 import time
 import subprocess
 import logging as log
+import sys
 
 AGENT_PROG = 'kingAgent.py'
 
@@ -64,7 +65,7 @@ class KingHallAgent:
 
     table_name = str(uuid.uuid4()) #must I check for repeated one?
     #Start a new king agent process
-    self._tables[table_name] = subprocess.Popen(['python.exe',
+    self._tables[table_name] = subprocess.Popen([sys.executable,
                                                  AGENT_PROG,
                                                  user, table_name]).pid
     log.info("[create] Process Started: %r "%(self._tables[table_name]))
