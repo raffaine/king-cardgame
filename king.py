@@ -1,7 +1,7 @@
 # -*- coding: cp1252 -*-
 from random import shuffle
 
-ref = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
+_ref = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
 
 #This class has the basic rule of the game,
 #     and the basic table evaluation when the round ends
@@ -17,10 +17,10 @@ class BaseGame:
         # Check the round and increment it
         # @param table must have 4 entries and each entry is terminated with its suit
         # @return the pair position of table winner and score
-        def playRound(self, table):
+        def playRound(self, table, pivot_index = 0):
                 self.round += 1
-                table = map( lambda x: (ref.index(x[:-1]),x[-1]), table )
-                pivot = table[0]
+                table = map( lambda x: (_ref.index(x[:-1]),x[-1]), table )
+                pivot = table[pivot_index]
                 return (table.index(max(filter(lambda x : x[-1] == pivot[-1],
                                                table ))),self.score)
                 
@@ -121,7 +121,7 @@ class King(BaseGame):
 
         # Player cannot play Hearts unless he only have Hearts
         #       or table started with Hearts
-        # If Player has the King of Hearts and don't have the suit,
+        # If Player has the King of Hearts and don't have the suit on table,
         #       HE MUST DISCARD THE KING OF HEARTS
         def handConstraint(self, table, hand, play):
                 if not len(table):
@@ -133,8 +133,37 @@ class King(BaseGame):
                         return play == 'KH' or not hand.count('KH')
                 
                 return possible.count(play)
-                
 
+# English Positives
+# Just like the base game, where each round score 25
+# In adition we have:
+#   - Trample Suit: Even when discarded, this suit takes the round
+class Positiva(BaseGame):
+        def __init__(self, trample = ''):
+                BaseGame.__init__(self)
+                self.trample = trample
+                self.score = 25
+                
+        # Check for Trample Suit and if found use it index for pivot suit
+        def playRound(self, table):
+                elem = filter(lambda x: x[-1] == self.trample, table)
+                index = table.index(elem[0]) if elem else 0
+                return BaseGame.playRound(self, table, index)
+
+
+_HANDS = \
+{
+        'VAZA': Vaza,
+        '2ULTIMAS': DuasUltimas,
+        'MULHERES': Mulheres,
+        'HOMENS': Homens,
+        'COPAS': Copas,
+        'KING': King,
+        'POSITIVA': Positiva
+}
+
+# Simple class to store player information
+# Mainly store players hand and list of choosen hands
 class KingPlayer:
     def __init__(self, name, queue):
         self.name = name
@@ -166,7 +195,7 @@ class KingTable:
                 self.score = []
                 self.gameCount = 0
                 self.game = None
-                self.deck = [ x+y for x in ref for y in ['S','C','H','D'] ]
+                self.deck = [ x+y for x in _ref for y in ['S','C','H','D'] ]
 
                 self.running = False
                 self.partialScore = 4*[0]
@@ -182,6 +211,16 @@ class KingTable:
 
         def numPlayers(self):
                 return len(self.players)
+
+        def possibleHands(self, player):
+                games = _HANDS.keys()
+                for p in self.players:
+                        played = filter(lambda x: p == player or \
+                                         x!='POSITIVA', p.games)
+                        for c in played:
+                                games.remove(c)
+                return games or ['POSITIVA']
+                        
 
         def start(self):
                 if len(self.players) == 4:
@@ -210,14 +249,22 @@ class KingTable:
                 if not self.players.count(player) or \
                    self.players.index(player) != self.turn:
                         return False
+
+                game = game.split() or [game]
+                #Check if game is possible
+                if not _HANDS.has_key(game[0]) or \
+                   not self.possibleHands(player).count(game[0]):
+                        return False
+                
+                #Positives could come with Trample Suit
+                #Start the game
+                self.game = _HANDS[game[0]]() if len(game) == 1 else \
+                            _HANDS[game[0]](game[1])
                         
-                #TODO check if game is possible
-                #TODO Positives needs to come with Trample Suit
-                self.game = BaseGame() #TODO create correct game based on choice
                 self.partialScore = 4*[0]
                 self.running = True 
                 
-                player.addGame(game)
+                player.addGame(game[0])
                 
                 return True
 
@@ -267,13 +314,6 @@ class KingTable:
 
 if __name__ == "__main__":
 
-        print "Testing simple hand constraint"
-        assert(BaseGame().handConstraint([],['2C','3H'],'3H')) #empty hand
-        assert(BaseGame().handConstraint(['2C'],['2H','3C'],'3C')) #play the table naipe
-        assert(not BaseGame().handConstraint(['2C'],['2H','3C'],'2H')) #invalid play
-        assert(BaseGame().handConstraint(['2C'],['2H','3C','5C','AS','AC'],'5C')) #more than one option
-        assert(BaseGame().handConstraint(['AD','JD','QH'],['2C','3C'],'2C')) #discard
-
         print "Testing game evaluation: Vaza"
         assert(Vaza().playRound([ '2H', '5H', 'AS', '4H' ]) == (1,-25))
         assert(Vaza().playRound([ '10D', '5C', 'AS', '4H' ]) == (0,-25))
@@ -303,17 +343,75 @@ if __name__ == "__main__":
 
         print "Testing game evaluation: Copas"
         assert(Copas().playRound(['5H','AS','AC','10H']) == (3,-40))
+        assert(Copas().playRound(['5D','6H','AD','10C']) == (2,-20))
+        assert(Copas().playRound(['5H','10H','AD','2H']) == (1,-60))
+        assert(Copas().playRound(['AH','6H','KH','10H']) == (0,-80))
+        assert(Copas().playRound(['5D','6S','AD','10C']) == (2,0))
 
         print "Testing game evaluation: King"
+        k = King()
         assert(King().playRound(['5H','AS','AC','10H']) == (3,0))
+        assert(not k.lastRound())
+        k = King()
+        assert(k.playRound(['AH','6C','KH','10H']) == (0,-160)) 
+        assert(k.lastRound())
 
+        print "Testing game evaluation: Positiva"
+        assert(Positiva().playRound(['5H','AS','AC','10H']) == (3,25)) #no trample
+        assert(Positiva('H').playRound(['5D','6H','AD','10D']) == (1,25)) #hearts
+        assert(Positiva('C').playRound(['5H','10H','2C','2D']) == (2,25)) #clubs
+        assert(Positiva('D').playRound(['AD','6D','KD','10D']) == (0,25)) #diamonds
+        assert(Positiva('S').playRound(['5D','6S','AH','10C']) == (1,25)) #spades
+        assert(Positiva('H').playRound(['5C','2S','AC','10C']) == (2,25)) #trample but no trample
+
+        print "Testing simple hand constraint"
+        assert(BaseGame().handConstraint([],['2C','3H'],'3H')) #empty hand
+        assert(BaseGame().handConstraint(['2C'],['2H','3C'],'3C')) #play the table naipe
+        assert(not BaseGame().handConstraint(['2C'],['2H','3C'],'2H')) #invalid play
+        assert(BaseGame().handConstraint(['2C'],['2H','3C','5C','AS','AC'],'5C')) #more than one option
+        assert(BaseGame().handConstraint(['AD','JD','QH'],['2C','3C'],'2C')) #discard
+        
         print "Testing game hand constraint: Copas"
-        assert(Copas().handConstraint([],['2C','3H'],'2C')) #empty hand
-
+        assert(Copas().handConstraint([],['2C','3H'],'2C')) #empty table
+        assert(not Copas().handConstraint([],['2C','3H'],'3H')) #wrong start
+        assert(Copas().handConstraint(['2H'],['2C','3H'],'3H')) #play the suit
+        assert(Copas().handConstraint(['2C'],['2H','3H'],'3H')) #burn on discard
+        
         print "Testing game hand constraint King"
-        assert(BaseGame().handConstraint([],['2C','3H'],'2C')) #empty hand
+        assert(King().handConstraint([],['2C','KH'],'2C')) #empty table
+        assert(not King().handConstraint([],['2C','KH'],'KH')) #wrong start
+        assert(King().handConstraint(['2H'],['3H','KH'],'3H')) #play the suit
+        assert(King().handConstraint(['2C'],['2H','KH','3D'],'KH')) #must discard
 
         print "Testing playing cards in your hand"
         assert(KingPlayer('t',None).setHand(['2C','4H']).cardInHand('4H'))
         assert(not KingPlayer('t',None).setHand(['3C','5D']).cardInHand('8S'))
         assert(KingPlayer('t',None).setHand(['5H','6S','8D']).cardInHand('6S'))
+
+        print "Checking for Hand Instances"
+        assert(isinstance(_HANDS['COPAS'](), Copas))
+
+        print "Checking Possible Hands"
+        k = KingTable('')
+        for i in range(4):
+                k.joinTable(KingPlayer(str(i),''))
+
+        valid = _HANDS.keys()
+        assert( k.possibleHands(k.players[0]) == valid )
+        k.players[0].games.append(valid.pop(valid.index('COPAS')))        
+        assert( k.possibleHands(k.players[0]) == valid )
+        k.players[0].games.append(valid.pop(valid.index('KING')))       
+        assert( k.possibleHands(k.players[0]) == valid )
+        k.players[0].games.append(valid.pop(valid.index('2ULTIMAS')))       
+        assert( k.possibleHands(k.players[0]) == valid )
+        k.players[0].games.append(valid.pop(valid.index('POSITIVA')))
+        assert( k.possibleHands(k.players[0]) == valid )       
+        assert( k.possibleHands(k.players[0]).count('POSITIVA') == 0)
+        k.players[0].games.append(valid.pop(valid.index('HOMENS')))       
+        assert( k.possibleHands(k.players[0]) == valid )
+        k.players[0].games.append(valid.pop(valid.index('MULHERES')))       
+        assert( k.possibleHands(k.players[0]) == valid )
+        k.players[0].games.append(valid.pop(valid.index('VAZA')))
+        assert( k.possibleHands(k.players[0]).count('POSITIVA') == 1)
+        k.players[0] = KingPlayer('','')
+        
