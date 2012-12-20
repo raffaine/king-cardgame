@@ -1,11 +1,18 @@
-Salão para jogos de cartas
+Salão para Jogos de Cartas
 
 
 King
 ====
 
 As regras para o jogo podem ser lidas em
-<https://en.wikipedia.org/wiki/King_%28card_game%29>.
+<https://en.wikipedia.org/wiki/King_(card_game)>.
+
+Três alterações foram feitas com base na experiência de jogo:
+ - Não existe ordem para as mãos, os jogadores tem liberdade para escolher a melhor mão
+	- Observando que cada jogador só pode escolher uma positiva (a não ser que não exista outra opção)
+ - Não existem Positivas decrescentes onde os jogadores começam com o máximo e vão perdendo pontos
+ - Na mão "No King of Hearts", traduzido como "King", o jogador não é obrigado a jogar o Rei de Copas quando a rodada iniciou com Copas.
+	- Caso o jogador tenha que descartar e este possui o Rei de Copas, ele deve jogá-lo.
 
 Os arquivos do jogo podem ser descritos como:
 

@@ -5,7 +5,6 @@ import os
 import time
 import subprocess
 import logging as log
-import sys
 
 AGENT_PROG = 'kingAgent.py'
 
