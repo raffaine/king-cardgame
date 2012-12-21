@@ -16,6 +16,7 @@ def handTakeAny(table, hand):
     possible = filter( lambda x: x[-1] == suit, hand )
     return random.sample(hand,1)[0] \
            if ( not len(possible) ) else random.sample(possible,1)[0]
+
 class Game:
     def __init__(self):
         credentials = pika.PlainCredentials('guest', 'guest')
@@ -33,6 +34,7 @@ class Game:
 
         self.table_name = ''
         self.numhands = 0
+        self.possibleHands = []
         self.process = self.listTables
         log.info('[SETUP] Up and Running')
     
@@ -49,7 +51,7 @@ class Game:
         elif action == 'TABLE':
             return '0'
         elif action == 'HAND':
-            return 'VAZA' #take any possible game
+            return random.sample(self.possibleHands, 1)[0] #take any possible game
         else:
             return raw_input()
 
@@ -80,6 +82,7 @@ class Game:
             return
 
         self.process = self.startGame
+        
     def createTable(self,message):
         self.table_name = message
         self.publishTable('join', self.name)
@@ -109,17 +112,29 @@ class Game:
         self.starter = 0
         self.process = self.setupHand
 
+    def chooseHand(self, message):
+        log.info('[AGENT] CHOOSE HAND %s'%(message))
+        self.possibleHands = eval(message.lstrip('CHOOSE'))
+        print "Choose one of these games: ", self.possibleHands
+        
+        game_name = ''
+        while not self.possibleHands.count(game_name):
+            game_name = self.getInput('HAND') or ''
+            
+        self.process = self.startRound
+        self.publishTable('chooseHand', game_name)
+        
+
     def setupHand(self, message):
         log.info('[AGENT] SETUP HAND %s'%(message))
         self.hand = handSort(eval(message.lstrip('CARDS')))
         print "Your Hand is: ", self.hand
         
         self.match = 0
-        self.process = self.startRound
-        if self.starter == self.position :
-            print "Choose the hand: "
-            game_name = self.getInput('HAND') or ''
-            self.publishTable('chooseHand', game_name)
+        self.process = self.startRound \
+                       if self.starter != self.position \
+                       else self.chooseHand
+            
 
     def startRound(self, message):
         log.info('[PLAYER] START ROUND %s'%(message))
@@ -142,6 +157,10 @@ class Game:
 
     def waitRound(self, message):
         log.info('[AGENT] ROUND %s'%(message))
+        if message.startswith('ENDHAND'):
+            self.endHand(message)
+            return
+        
         if message.startswith('PLAY'):
             self.table.append( message.split()[-1] )  
 

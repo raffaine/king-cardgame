@@ -83,9 +83,13 @@ class KingAgent:
     log.info("[NOTIFY ALL] %r"%(message,))
 
   def sendHands(self):
-      self.table.setupHand()
+      c_player = self.table.setupHand()
       for p in self.table.players:
         self.reply(p.queue, 'CARDS %s'%(str(p.hand)))
+        
+      self.reply(c_player.queue, \
+                 'CHOOSE %s'%(str(self.table.possibleHands(c_player))))
+      
     
   def KA_join(self, user, message):
     log.info("[join] %r,%r "%(user,message))
