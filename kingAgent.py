@@ -44,7 +44,9 @@ class KingAgent:
     log.info('[SETUP] Starting King Agent')
 
     #Just make a checkpoint with the hall agent to assure binds 
-    self.publishHall('agentCheckpoint', '%s %s'%(os.getpid(), user))
+    #self.publishHall('agentCheckpoint', '%s %s'%(os.getpid(), user))
+    sys.stdout.write('agentCheckpoint\n')
+    sys.stdout.flush()
         
     self.channel.start_consuming()
 
@@ -179,7 +181,7 @@ if __name__ == "__main__":
     print "WRONG USAGE!"
     exit()
   
-  log.basicConfig(stream = sys.stdout,
+  log.basicConfig(stream = sys.stderr,
                   level = log.INFO)
   
   agent = KingAgent(sys.argv[2])

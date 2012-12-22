@@ -64,12 +64,16 @@ class KingHallAgent:
 
     table_name = str(uuid.uuid4()) #must I check for repeated one?
     #Start a new king agent process
-    self._tables[table_name] = subprocess.Popen([sys.executable,
-                                                 AGENT_PROG,
-                                                 user, table_name]).pid
+    agent_ = subprocess.Popen([sys.executable, AGENT_PROG,
+                               user, table_name], stdout=subprocess.PIPE)
+    self._tables[table_name] = agent_.pid
 
+    #Using stdout blocking mechanism to know when to start
+    res = agent_.stdout.readline()
     log.info("[create] Process Started: %r "%(self._tables[table_name]))
-    time.sleep(2) #can do better, but wait a bit until table start listening
+
+    #Once the agent has sent Ok signal I notify user to join
+    self.reply(user, table_name)
 
   def KH_agentExit(self, user, message):
     log.info('[AGENTEXIT] %r,%r'%(user,message))
