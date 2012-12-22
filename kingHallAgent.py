@@ -67,7 +67,9 @@ class KingHallAgent:
     self._tables[table_name] = subprocess.Popen([sys.executable,
                                                  AGENT_PROG,
                                                  user, table_name]).pid
+
     log.info("[create] Process Started: %r "%(self._tables[table_name]))
+    time.sleep(2) #can do better, but wait a bit until table start listening
 
   def KH_agentExit(self, user, message):
     log.info('[AGENTEXIT] %r,%r'%(user,message))
