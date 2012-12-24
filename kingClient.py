@@ -10,12 +10,6 @@ ref = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
 
 def handSort(hand):
     return [ ref[v]+s for s,v in sorted(map(lambda u: (u[-1],ref.index(u[:-1])),hand))]            
-             
-def handTakeAny(table, hand):
-    suit = table[0][-1] if len(table) else ''
-    possible = filter( lambda x: x[-1] == suit, hand )
-    return random.sample(hand,1)[0] \
-           if ( not len(possible) ) else random.sample(possible,1)[0]
 
 class Game:
     def __init__(self):
@@ -43,17 +37,8 @@ class Game:
         self.process( body )
         ch.basic_ack(delivery_tag = method.delivery_tag)
 
-    def getInput(self, action=''):
-        if action == 'CARD':
-            return handTakeAny(self.table, self.hand) #take any possible card
-        elif action == 'NAME':
-            return sys.argv[1] if len(sys.argv) > 1 else raw_input()
-        elif action == 'TABLE':
-            return '0'
-        elif action == 'HAND':
-            return random.sample(self.possibleHands, 1)[0] #take any possible game
-        else:
-            return raw_input()
+    def getInput(self, action='', *params):
+        raise NotImplementedError('getInput must be implemented by derived classes')
 
     def publishHall(self, command, message='empty'):
         props = pika.BasicProperties(reply_to = self.queue_name)
@@ -80,8 +65,6 @@ class Game:
             self.process = self.listTables
             self.publishHall('agenthall.listTable','open')
             return
-
-        self.process = self.startGame
         
     def createTable(self,message):
         self.table_name = message
@@ -90,17 +73,16 @@ class Game:
 
     def listTables(self, message):
         log.info('[HALL] LIST %s'%(message))
+        self.table_name = ''
         lTables = eval(message)
         num = len(lTables)
         if not num:
-            print "no table available, creating a new one."
+            log.info("no table available, creating a new one.")
             self.publishHall('agenthall.createTable')
             self.process = self.createTable
         else:
-            print "Available: lTables %s"%(str(zip(range(num),lTables)))
             while not self.table_name:
-                print "Choose table number:"
-                choice = int(self.getInput('TABLE') or 0)
+                choice = int(self.getInput('TABLE', zip(range(num),lTables)) or 0)
                 self.table_name = lTables[choice] if choice < num else ''
             self.publishTable('join', self.name)
             self.process = self.joinTable
@@ -114,9 +96,7 @@ class Game:
 
     def chooseHand(self, message):
         log.info('[AGENT] CHOOSE HAND %s'%(message))
-        self.possibleHands = eval(message.lstrip('CHOOSE'))
-        print "Choose one of these games: ", self.possibleHands
-        
+        self.possibleHands = eval(message.lstrip('CHOOSE'))        
         game_name = ''
         while not self.possibleHands.count(game_name):
             game_name = self.getInput('HAND') or ''
@@ -128,7 +108,6 @@ class Game:
     def setupHand(self, message):
         log.info('[AGENT] SETUP HAND %s'%(message))
         self.hand = handSort(eval(message.lstrip('CARDS')))
-        print "Your Hand is: ", self.hand
         
         self.match = 0
         self.process = self.startRound \
@@ -144,12 +123,9 @@ class Game:
         self.playRound()
 
     def playRound(self):
-        print "Table is %s"%(str(self.table))
         if self.starter == self.position:
-            print "Hand is [%s]"%(','.join(self.hand))
-            print "Choose the card to play: "
             while True:
-                card = self.getInput('CARD')
+                card = self.getInput('CARD', self.table, self.hand)
                 if self.hand.count(card):
                     break           
 
@@ -182,7 +158,6 @@ class Game:
 
         message = message.split()
         score = ''.join(message[2:])
-        print "%s take this round, score is %s"%(message[1],score)
 
         self.match += 1
         if self.match < 13:  
@@ -207,26 +182,17 @@ class Game:
         self.channel.stop_consuming()
                 
     def start(self):
-        print "Please, enter your name:"
         self.name = self.getInput('NAME') or 'empty'
         self.publishHall('agenthall.listTable','open')
         
         try:
            self.channel.start_consuming()
         except KeyboardInterrupt:
-            print "Quiting Game"
+            log.info("Quiting Game")
             self.publishTable('quit')        
         except:
-            print "Unexpected error:", sys.exc_info()[0]
-            raw_input()
+            log.info("Unexpected error: %s"%(sys.exc_info()[0]))
             raise
-
-if __name__ == "__main__":
-    log.basicConfig(stream = sys.stdout, level = log.INFO)
-    cGame = Game()
-    cGame.start()
-    
-
 
 
 
