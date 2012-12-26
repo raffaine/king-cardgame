@@ -5,55 +5,48 @@ import os
 import sys
 import time
 
-def _raise():
-    raise NotImplementedError('platform not supported')
-
-clear_screen = lambda:\
-{
-    'win32': os.system('cls'),
-    'linux2': os.system('clear'),
-    'mac': os.system('clear')
-}.get(sys.platform, _raise)
-
-table_order = []
-actual_hand = ''
-game_score = ''
-actual_score = ''
-
-def prompt(print_list):
-    clear_screen()
-    print "KING, THE CARD GAME"
-    if table_order:
-        print "Table order is: ", table_order
-    if game_score:
-        print "Game score is: ", game_score
-    if actual_score:
-        print "Round score is: ", actual_score
-    for elem in print_list:
-        print elem
+def clear_screen():
+    os.system({'win32': 'cls'}.get(sys.platform, 'clear'))
 
 class HumanClient(Game):
     def __init__(self):
         Game.__init__(self)
-        print "KING, THE CARD GAME"
+        self.table_order = []
+        self.actual_hand = ''
+        self.game_score = ''
+        self.actual_score = ''
     
+    def prompt(self, print_list):
+        clear_screen()
+        print "KING, THE CARD GAME"
+        if self.table_order:
+            print "Table order is: ", self.table_order
+        if self.game_score:
+            print "Game score is: ", self.game_score
+        if self.actual_score:
+            print "Round score is: ", self.actual_score
+        for elem in print_list:
+            print elem
+            
     def getInput(self, action='', *args):
         if action == 'CARD':
-            prompt(["Your turn to play, Game is: ", actual_hand,
-                    "Table is: ", args[0],
-                    "Choose one card from your hand:", args[1]])
+            self.prompt(["Your turn to play, Game is: ", self.actual_hand,
+                         "Table is: ", args[0],
+                         "Choose one card from your hand:", args[1]])
             return raw_input().upper()
         elif action == 'NAME':
-            prompt(["Before start playing you must choose your name:"])
+            self.prompt(["Before start playing you must choose your name:"])
             return raw_input() or 'safado_que_nao_escolheu_o_nome'
         elif action == 'TABLE':
-            prompt(["There are some available tables", args[0],
-                    "Choose table number:"])
+            self.prompt(["There are some available tables", args[0],
+                         "Choose table number:"])
             return raw_input() or '0'
         elif action == 'HAND':
-            prompt(["You must decide for your hand",
-                    self.possibleHands,
-                    "Choose one hand from the list:"])
+            self.prompt(["You have the following cards",
+                         self.hand,
+                         "You must decide for your hand",
+                         self.possibleHands,
+                         "Choose one hand from the list:"])
             return raw_input().upper()
         else:
             Game.getInput(self, action, args)
@@ -65,23 +58,25 @@ class HumanClient(Game):
         
     def startGame(self, message):
         Game.startGame(self, message)
-        table_order = self.order                
+        self.table_order = self.order                
 
     def startRound(self, message):
+        if message == 'HAND:
+            self.actual_hand = ' '.join(message.split()[1:])
         Game.startRound(self, message)
-        actual_hand = message
 
     def endRound(self, message):
+        print "Final Table: ",self.table
+        n_message = message.split()
+        self.actual_score = ''.join(n_message[2:])
+        print "%s take this round."%(n_message[1])
+        time.sleep(2)
+        
         Game.endRound(self, message)
 
-        message = message.split()
-        actual_score = ''.join(message[2:])
-        print "%s take this round."%(message[1])
-        time.sleep(2)
-
     def endHand(self, message):
+        self.game_score = message
         Game.endHand(self, message)
-        game_score = message
 
     def gameEnd(self, message):
         Game.gameEnd(self, message)
@@ -89,7 +84,7 @@ class HumanClient(Game):
         raw_input()
 
 if __name__ == "__main__":
-    log.basicConfig(stream = sys.stdout, level = log.INFO)
+    log.basicConfig(filename='human.log', filemode='w', level = log.INFO)
     cGame = HumanClient()
     cGame.start()
     
