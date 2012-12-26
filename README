@@ -30,3 +30,10 @@ Requerimentos Mínimos
 
   + RabbitMQ :: v3.0
   + Pika :: Biblioteca Python, v0.9.8
+
+Requerimentos para os Clients
+-----------------------------
+
+** C#
+   + RabbitMQ .NET Client v3.0.1
+   + Adicionar a referencia a DLL RabbitMQ.Client.dll na Solution

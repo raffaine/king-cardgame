@@ -1,2 +1,6 @@
 *.pyc
 *.log
+*.exe
+*.suo
+bin/
+obj/
