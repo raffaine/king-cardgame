@@ -1,0 +1,3 @@
+[submodule "Clients/ms.net/rabbitmq-client"]
+	path = Clients/ms.net/rabbitmq-client
+	url = https://github.com/rabbitmq/rabbitmq-dotnet-client.git
