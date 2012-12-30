@@ -1,4 +1,4 @@
-Salão para Jogos de Cartas
+﻿Salão para Jogos de Cartas
 
 
 King
@@ -34,6 +34,9 @@ Requerimentos Mínimos
 Requerimentos para os Clients
 -----------------------------
 
-** C#
-   + RabbitMQ .NET Client v3.0.1
+** C# Console
+   + RabbitMQ .NET Client v3.0.1 (Adicionado como um submodule do repositorio)
    + Adicionar a referencia a DLL RabbitMQ.Client.dll na Solution
+** C# GUI
+   + As mesmas da versão Console
+   + DISCLAIMER: cards.png foi retirado do site: http://math.hws.edu/javanotes/c13/s1.html
