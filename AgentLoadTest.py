@@ -3,12 +3,12 @@ import time
 import subprocess
 
 HALL_PROG = 'kingHallAgent.py'
-CLIENT = 'kingClient.py'
+CLIENT = 'kingBot.py'
 
-NUM_CLIENTS = 8
+NUM_CLIENTS = 2
 EXEC = sys.executable if sys.platform != 'win32' else "python.exe"
 
-SPAWN_RATE = 60 #PER MINUTE
+SPAWN_RATE = 600 #PER MINUTE
 
 #logHall = open("logHall.log","w")
 #hall = subprocess.Popen([sys.executable, HALL_PROG], stdout=logHall)

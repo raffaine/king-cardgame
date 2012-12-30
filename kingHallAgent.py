@@ -7,7 +7,8 @@ import subprocess
 import logging as log
 
 AGENT_PROG = 'kingAgent.py'
-
+BOTS_NAMES = ['Regiane', 'Samurai', 'John']
+BOTS_PROGS = {'easy':('python.exe','kingBot.py')}#sys.executable
 class KingHallAgent:
 
   _tables = {}
@@ -71,6 +72,14 @@ class KingHallAgent:
     #Using stdout blocking mechanism to know when to start
     res = agent_.stdout.readline()
     log.info("[create] Process Started: %r "%(self._tables[table_name]))
+
+    #If in single player mode, start 3 bots
+    if message.startswith("single"):
+      #TODO Create 3 bots based on dificulty set on message
+      dificulty = 'easy' #if invalid or empty always set easy
+      (proc_, prog_) = BOTS_PROGS[dificulty]
+      for bot_name in BOTS_NAMES:
+        bot_ = subprocess.Popen([proc_, prog_, bot_name, table_name])
 
     #Once the agent has sent Ok signal I notify user to join
     self.reply(user, table_name)

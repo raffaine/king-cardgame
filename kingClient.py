@@ -181,9 +181,13 @@ class Game:
             raise KeyboardInterrupt # TODO estado inválido, sei lá o que fazer
         self.channel.stop_consuming()
                 
-    def start(self):
+    def start(self, single=False):
         self.name = self.getInput('NAME') or 'empty'
-        self.publishHall('agenthall.listTable','open')
+        if single:
+            self.publishHall('agenthall.createTable','single')
+            self.process = self.createTable
+        else:
+            self.publishHall('agenthall.listTable','open')
         
         try:
            self.channel.start_consuming()

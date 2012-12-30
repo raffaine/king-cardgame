@@ -33,10 +33,30 @@ class BasicBot(Game):
         Game.endHand(self, message)
         #Useful to decide some action based on hand winning
 
+    def start(self, p_name = None, p_table = None):
+        if not p_name or not p_table:
+            Game.start(self, True)
+            return
+        
+        self.name = p_name
+        self.createTable(p_table)
+        
+        try:
+           self.channel.start_consuming()
+        except KeyboardInterrupt:
+            log.info("Quiting Game")
+            self.publishTable('quit')        
+        except:
+            log.info("Unexpected error: %s"%(sys.exc_info()[0]))
+            raise
+
 if __name__ == "__main__":
     log.basicConfig(stream = sys.stdout, level = log.INFO)
     cGame = BasicBot()
-    cGame.start()
+    if len(sys.argv) < 3:
+        cGame.start()
+    else:
+        cGame.start(sys.argv[1], sys.argv[2])
     
 
 
