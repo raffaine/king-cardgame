@@ -1,4 +1,4 @@
-# -*- coding: cp1252 -*-
+# -*- coding: utf-8 -*-
 from random import shuffle
 
 _ref = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
@@ -320,7 +320,7 @@ if __name__ == "__main__":
         assert(Vaza().playRound([ '3C', '3H', 'AC', '4H' ]) == (2,-25))
         assert(Vaza().playRound([ '5S', '6S', 'KS', 'AS' ]) == (3,-25))
 
-        print "Testing game evaluation: Duas Últimas"
+        print "Testing game evaluation: Duas Ãšltimas"
         assert(DuasUltimas().playRound(['5H','KS','AC','10H']) == (3,0))
         du = DuasUltimas()
         du.round = 11

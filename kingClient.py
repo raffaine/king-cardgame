@@ -1,4 +1,4 @@
-# -*- coding: cp1252 -*-
+# -*- coding: utf-8 -*-
 import pika
 import time
 import sys
@@ -154,7 +154,7 @@ class Game:
     def endRound(self, message):
         log.info('[AGENT] END ROUND %s'%(message))
         if not message.startswith('ENDROUND'):
-            raise KeyboardInterrupt # TODO estado inv·lido, sei l· o que fazer
+            raise KeyboardInterrupt # TODO estado inv√°lido, sei l√° o que fazer
 
         message = message.split()
         score = ''.join(message[2:])
@@ -169,7 +169,7 @@ class Game:
     def endHand(self, message):
         log.info('[AGENT] END HAND %s'%(message))
         if not message.startswith('ENDHAND'):
-            raise KeyboardInterrupt # TODO estado inv·lido, sei l· o que fazer
+            raise KeyboardInterrupt # TODO estado inv√°lido, sei l√° o que fazer
         
         self.numhands += 1
         self.starter = self.numhands % 4
@@ -178,7 +178,7 @@ class Game:
     def gameEnd(self, message):
         log.info('[AGENT] END GAME %s'%(message))
         if not message.startswith('GAMEOVER'):
-            raise KeyboardInterrupt # TODO estado inv·lido, sei l· o que fazer
+            raise KeyboardInterrupt # TODO estado inv√°lido, sei l√° o que fazer
         self.channel.stop_consuming()
                 
     def start(self, single=False):
