@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pika
 import sys
 import uuid
@@ -8,7 +9,9 @@ import logging as log
 
 AGENT_PROG = 'kingAgent.py'
 BOTS_NAMES = ['Regiane', 'Samurai', 'John']
-BOTS_PROGS = {'easy':('python.exe','kingBot.py')}#sys.executable
+PYTHON_EXEC = sys.executable if sys.platform != 'win32' else "python.exe"
+BOTS_PROGS = {'easy':(PYTHON_EXEC,'kingBot.py')}
+
 class KingHallAgent:
 
   _tables = {}
