@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/2010/manifest">
+  <Identity Name="f9a94f08-3903-472c-8aa4-fb6f41c1488c" Publisher="CN=Pati" Version="1.0.0.0" />
+  <Properties>
+    <DisplayName>WinStoreKing</DisplayName>
+    <PublisherDisplayName>Pati</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Prerequisites>
+    <OSMinVersion>6.2.1</OSMinVersion>
+    <OSMaxVersionTested>6.2.1</OSMaxVersionTested>
+  </Prerequisites>
+  <Resources>
+    <Resource Language="x-generate" />
+  </Resources>
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="WinStoreKing.App">
+      <VisualElements DisplayName="WinStoreKing" Logo="Assets\Logo.png" SmallLogo="Assets\SmallLogo.png" Description="WinStoreKing" ForegroundText="dark" BackgroundColor="#464646">
+        <DefaultTile ShowName="allLogos" />
+        <SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#FFFFFF" />
+      </VisualElements>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <Capability Name="internetClient" />
+  </Capabilities>
+</Package>
