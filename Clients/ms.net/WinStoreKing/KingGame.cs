@@ -25,32 +25,13 @@ namespace WinStoreKing
 
         // Game Resources
         private SpriteFont _font;
-        private Texture2D _deck;
 
-        // Useful constants for Card Drawing
-        const int card_x_size = 79;
-        const int card_y_size = 123;
-        const int back_card_x = card_x_size * 2;
-        const int back_card_y = card_y_size * 4;
-        // Well ... these ones I cannot made constants ... but they are!
-        string[] values = { "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K" };
-        string[] suits = { "C", "D", "H", "S" };
-
-        //will be removed later
-        string[] player_hand;
+        Table _table;
 
         public KingGame()
         {
             _graphics = new GraphicsDeviceManager(this);
             Content.RootDirectory = "Content";
-
-            // This is just to show some stuff ... will be removed
-            Random r = new Random();
-            player_hand = new string[13];
-            for (int i = 0; i < player_hand.Length; ++i)
-            {
-                player_hand[i] = values[r.Next(13)] + suits[r.Next(4)];
-            }
         }
 
         /// <summary>
@@ -78,7 +59,7 @@ namespace WinStoreKing
             // TODO: use this.Content to load your game content here
             try
             {
-                _deck = Content.Load<Texture2D>("cards");
+                Card.deck = Content.Load<Texture2D>("cards");
                 _font = Content.Load<SpriteFont>("Font");
             }
             catch (Exception e)
@@ -87,6 +68,19 @@ namespace WinStoreKing
                 //TODO: Debug this shit!
                 string s = e.Message;
             }
+
+            // This is just to show some stuff ... will be removed
+            Random r = new Random();
+
+            string[] order = {"D2","3Horas","Regiane","Samurai"};
+            _table = new Table(order, "3Horas");
+
+            string[] test_hand = new string[13];
+            for (int i = 0; i < test_hand.Length; ++i)
+                test_hand[i] = Card.values[r.Next(13)] + Card.suits[r.Next(4)];
+
+            _table.SetupHand(test_hand);
+
         }
 
         /// <summary>
@@ -127,27 +121,7 @@ namespace WinStoreKing
             _spriteBatch.DrawString(_font, "1,2,3 ... testando",
                                     new Vector2(_width / 2, 0f), Color.Black);
 
-            float initial_height = (float)_height - card_y_size;
-            float initial_width = .1f * _width;
-            const float card_space = 5f;
-            
-            foreach (string card in player_hand)
-            {
-                int x_ = card_x_size * Array.IndexOf(values, card.Substring(0, card.Length - 1));
-                int y_ = card_y_size * Array.IndexOf(suits, card.Substring(card.Length - 1));
-                
-                _spriteBatch.Draw(_deck,
-                                    new Vector2(initial_width, initial_height),
-                                    new Rectangle(x_, y_, card_x_size, card_y_size),
-                                    Color.White);
-
-                initial_width += card_x_size + card_space;
-                if (initial_width > .9f * _width)
-                {
-                    initial_width = .3f * _width;
-                    initial_height -= card_y_size + card_space;
-                }
-            }
+            _table.Draw(_spriteBatch, _width, _height);
 
             _spriteBatch.End();
 
