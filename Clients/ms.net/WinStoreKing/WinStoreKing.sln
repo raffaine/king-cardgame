@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinStoreKing", "WinStoreKing.csproj", "{6C53C538-F6F3-4BB1-91A3-3FEE8AB4BCF3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Win7King", "Win7King.csproj", "{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,16 @@ Global
 		{6C53C538-F6F3-4BB1-91A3-3FEE8AB4BCF3}.Release|x86.ActiveCfg = Release|x86
 		{6C53C538-F6F3-4BB1-91A3-3FEE8AB4BCF3}.Release|x86.Build.0 = Release|x86
 		{6C53C538-F6F3-4BB1-91A3-3FEE8AB4BCF3}.Release|x86.Deploy.0 = Release|x86
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Debug|ARM.ActiveCfg = Debug|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Release|ARM.ActiveCfg = Release|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Release|x64.ActiveCfg = Release|Any CPU
+		{0E86DF1F-0E73-4A51-B4FD-B5850C67B82F}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

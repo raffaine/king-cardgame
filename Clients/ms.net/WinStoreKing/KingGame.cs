@@ -31,6 +31,11 @@ namespace WinStoreKing
         public KingGame()
         {
             _graphics = new GraphicsDeviceManager(this);
+
+#if WIN7
+            _graphics.IsFullScreen = true;
+#endif
+
             Content.RootDirectory = "Content";
         }
 
