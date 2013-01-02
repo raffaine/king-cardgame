@@ -2,5 +2,8 @@
 *.log
 *.exe
 *.suo
+*.sdf
+*.opensdf
+Debug/
 bin/
 obj/

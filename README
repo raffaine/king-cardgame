@@ -58,3 +58,13 @@ Requerimentos para os Clients
    + DISCLAIMER: Como nao tenho VS2010 para gerar minhas proprias
    fontes, utilizei uma fonte que encontrei em um dos Samples da
    MonoGame: https://github.com/CartBlanche/MonoGame-Samples
+
+** C++ Console
+   + RabbitMQ C Client (Libs\DLLs do Windows incluidas no Repositorio),
+   fontes disponiveis em: https://github.com/alanxz/rabbitmq-c
+   + RabbitMQ C++ Wrapper (Libs\DLLs do Windows incluidas no
+   Repositorio), fontes disponíveis em:
+   https://github.com/alanxz/SimpleAmqpClient
+   + Boost 1.47.0 or newer (DLLs incluidas no repositorio, da versao
+   1.51.0, por comodidade) deve ser feito download e build da boost
+   pelo site: http://www.boost.org/
