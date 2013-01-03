@@ -18,5 +18,9 @@ namespace WinStoreKing
 
         void PlayCard(string card);
         void SetHand(string[] cards);
+
+        //Helper Drawing Functions
+        Vector2 getIncrement(int width, int height);
+        Vector2 getStartPos(int width, int height);
     }
 }

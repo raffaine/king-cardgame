@@ -53,5 +53,16 @@ namespace WinStoreKing
         {
             return (IEnumerator) GetEnumerator();
         }
+
+        public Vector2 getIncrement(int width, int height)
+        {
+            return new Vector2(.8f * width / hand.Count, 0f);
+        }
+
+        public Vector2 getStartPos(int width, int height)
+        {
+            return new Vector2(.1f * width + Card.card_x_size / 2,
+                               height - (Card.card_y_size / 2));
+        }
     }
 }

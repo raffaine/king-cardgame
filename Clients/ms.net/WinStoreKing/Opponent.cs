@@ -16,10 +16,11 @@ namespace WinStoreKing
         int maxcounter;
         int counter;
 
-        public FakeHand(int count)
+        public FakeHand(int count, float angle)
         {
             maxcounter = counter;
             counter = count;
+            _back.Angle = angle;
         }
 
         public Card Current
@@ -47,10 +48,10 @@ namespace WinStoreKing
         }
     }
 
-    class Opponent : IPlayer
+    abstract class BaseOpponent : IPlayer
     {
-        int numCards;
-        string _name;
+        protected int numCards;
+        protected string _name;
 
         public string Name
         {
@@ -58,7 +59,7 @@ namespace WinStoreKing
             set { _name = value; }
         }
 
-        public Opponent(string name)
+        public BaseOpponent(string name)
         {
             _name = name;
             SetHand(null);
@@ -79,14 +80,85 @@ namespace WinStoreKing
             numCards--;
         }
 
-        public IEnumerator<Card> GetEnumerator()
-        {
-            return new FakeHand(numCards);
-        }
+        public abstract IEnumerator<Card> GetEnumerator();
+        public abstract Vector2 getIncrement(int width, int height);
+        public abstract Vector2 getStartPos(int width, int height);
 
         IEnumerator IEnumerable.GetEnumerator()
         {
             return (IEnumerator) GetEnumerator();
+        }
+    }
+
+    class LeftOpponent : BaseOpponent
+    {
+        public LeftOpponent(string name)
+            : base(name)
+        {
+        }
+
+        public override IEnumerator<Card> GetEnumerator()
+        {
+            return new FakeHand(numCards, (float)Math.PI/2f);
+        }
+
+        public override Vector2 getIncrement(int width, int height)
+        {
+            return new Vector2(0f, .6f * height / numCards);
+        }
+
+        public override Vector2 getStartPos(int width, int height)
+        {
+            return new Vector2(5f + Card.card_y_size / 2f,
+                               .2f * height);
+        }
+    }
+
+    class RightOpponent : BaseOpponent
+    {
+        public RightOpponent(string name)
+            : base(name)
+        {
+        }
+
+        public override IEnumerator<Card> GetEnumerator()
+        {
+            return new FakeHand(numCards, -(float)Math.PI / 2f);
+        }
+
+        public override Vector2 getIncrement(int width, int height)
+        {
+            return new Vector2(0f, .6f * height / numCards);
+        }
+
+        public override Vector2 getStartPos(int width, int height)
+        {
+            return new Vector2(width - (5f + Card.card_y_size / 2f),
+                                .2f * height);
+        }
+    }
+
+    class TopOpponent : BaseOpponent
+    {
+        public TopOpponent(string name)
+            : base(name)
+        {
+        }
+
+        public override IEnumerator<Card> GetEnumerator()
+        {
+            return new FakeHand(numCards, (float)Math.PI);
+        }
+
+        public override Vector2 getIncrement(int width, int height)
+        {
+            return new Vector2(.6f * width / numCards, 0f);
+        }
+
+        public override Vector2 getStartPos(int width, int height)
+        {
+            return new Vector2(.2f * width + Card.card_x_size / 2,
+                               Card.card_y_size / 2);
         }
     }
 }

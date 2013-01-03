@@ -20,22 +20,42 @@ namespace WinStoreKing
     class Table
     {
         IPlayer[] players;
+        List<Card> table;
+
         int dealer;
         int turn;
 
+        int width;
+        int height;
+        Vector2 center;
+
         public Table(string[] order, string player)
         {
+            table = new List<Card>();
             players = new IPlayer[4];
             int ind = Array.IndexOf(order, player);
             //TODO: Check for a valid index?
 
             players[(int)POSITIONS.PLAYER] = new Player(player);
-            players[(int)POSITIONS.LEFT] = new Opponent(order[(ind+1) % 4]);
-            players[(int)POSITIONS.TOP] = new Opponent(order[(ind+2) % 4]);
-            players[(int)POSITIONS.RIGHT] = new Opponent(order[(ind+3) % 4]);
+            players[(int)POSITIONS.LEFT] = new LeftOpponent(order[(ind+1) % 4]);
+            players[(int)POSITIONS.TOP] = new TopOpponent(order[(ind+2) % 4]);
+            players[(int)POSITIONS.RIGHT] = new RightOpponent(order[(ind+3) % 4]);
 
             dealer = (4 - ind) % 4;
             turn = dealer;
+        }
+
+        //TODO: Useless ... remove later.
+        public int GetCardCount(string player)
+        {
+            return Array.Find(players, e => e.Name == player).CardCount();
+        }
+
+        public void Resize(int w, int h)
+        {
+            width = w;
+            height = h;
+            center = new Vector2(w / 2f, h / 2f);
         }
 
         public void SetupHand(string[] cards)
@@ -49,81 +69,67 @@ namespace WinStoreKing
             }
         }
 
-        static Vector2 getIncrement(POSITIONS p, int count, int w, int h)
+        public void PlayCard(string card, string player)
         {
-            switch (p)
+            // Must I check for player in array or assume is valid?
+            int pos = Array.FindIndex(players, e => e.Name == player);
+
+            Card c = new Card(card);
+            switch ((POSITIONS)pos)
             {
                 case POSITIONS.PLAYER:
-                    return new Vector2(.8f * w / count, 0f);
+                    c.Position = new Vector2(center.X,
+                                             center.Y + Card.card_y_size / 2);
+                    break;
                 case POSITIONS.LEFT:
+                    c.Angle = (float)Math.PI / 2;
+                    c.Position = new Vector2(center.X - Card.card_y_size / 2,
+                                             center.Y);
+                    break;
                 case POSITIONS.RIGHT:
-                    return new Vector2(0f, .6f * h / count);
+                    c.Angle = -(float)Math.PI / 2;
+                    c.Position = new Vector2(center.X + Card.card_y_size / 2,
+                                             center.Y);
+                    break;
                 case POSITIONS.TOP:
-                    return new Vector2(.6f * w / count, 0f);
+                    c.Angle = (float)Math.PI;
+                    c.Position = new Vector2(center.X,
+                                             center.Y - Card.card_y_size / 2);
+                    break;
                 default:
-                    throw new InvalidOperationException("invalid position");
+                    throw new InvalidOperationException("Player is not in table");
             }
+
+            // TODO: Here comes the animation!
+            table.Add(c);
+            players[pos].PlayCard(card);
         }
 
-        static Vector2 getStartPos(POSITIONS p, int w, int h)
+        //TODO: Enhance this one
+        public void EndRound()
         {
-            switch (p)
-            {
-                case POSITIONS.PLAYER:
-                    return new Vector2(.1f * w + Card.card_x_size / 2,
-                                       h - (Card.card_y_size / 2));
-                case POSITIONS.LEFT: 
-                    return new Vector2( 5f + Card.card_y_size / 2f,
-                                       .2f * h);
-                case POSITIONS.RIGHT:
-                    return new Vector2(w - (5f + Card.card_y_size / 2f),
-                                       .2f * h);
-                case POSITIONS.TOP:
-                    return new Vector2(.2f * w + Card.card_x_size / 2,
-                                       Card.card_y_size / 2);
-                default:
-                    throw new InvalidOperationException("invalid position");
-            }
+            table.Clear();
         }
 
-        static float getAngle(POSITIONS p)
+        public void Draw(SpriteBatch batch)
         {
-            switch (p)
+            // Draw Player's Hands
+            foreach (IPlayer player in players)
             {
-                case POSITIONS.PLAYER:
-                    return 0f;
-                case POSITIONS.LEFT:
-                    return (float) Math.PI/2f;
-                case POSITIONS.RIGHT:
-                    return -(float)Math.PI / 2f;
-                case POSITIONS.TOP:
-                    return (float)Math.PI;
-                default:
-                    throw new InvalidOperationException("invalid position");
-            }
-        }
+                Vector2 diff = player.getIncrement(width, height);
+                Vector2 pos = player.getStartPos(width, height);
 
-        public void Draw(SpriteBatch batch, int width, int height)
-        {
-            for (int i = 0; i < 4; ++i)
-            {
-                Vector2 diff = getIncrement((POSITIONS) i, 
-                                            players[i].CardCount(),
-                                            width, height);
-
-                Vector2 pos = getStartPos((POSITIONS) i,
-                                          width, height);
-
-                float angle = getAngle((POSITIONS) i);
-
-                foreach (Card c in players[i])
+                foreach (Card c in player)
                 {
                     c.Position = pos;
-                    c.Angle = angle;
                     c.Draw(batch);
                     pos += diff;
                 }
             }
+
+            //Draw Table Cards
+            foreach (Card c in table)
+                c.Draw(batch);
         }
     }
 }

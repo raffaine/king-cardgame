@@ -27,11 +27,18 @@ namespace WinStoreKing
         private SpriteFont _font;
 
         Table _table;
+        int elapsedTime;
+        int turn;
+        int card;
+        string[] order = { "D2", "3Horas", "Regiane", "Samurai" };
+        string[] test_hand = new string[13];
 
         public KingGame()
         {
             _graphics = new GraphicsDeviceManager(this);
 
+            // Enable the default mouse view
+            IsMouseVisible = true;
 #if WIN7
             _graphics.IsFullScreen = true;
 #endif
@@ -77,15 +84,16 @@ namespace WinStoreKing
             // This is just to show some stuff ... will be removed
             Random r = new Random();
 
-            string[] order = {"D2","3Horas","Regiane","Samurai"};
             _table = new Table(order, "3Horas");
 
-            string[] test_hand = new string[13];
             for (int i = 0; i < test_hand.Length; ++i)
                 test_hand[i] = Card.values[r.Next(13)] + Card.suits[r.Next(4)];
 
             _table.SetupHand(test_hand);
 
+            elapsedTime = 0;
+            turn = 0;
+            card = 0;
         }
 
         /// <summary>
@@ -105,6 +113,25 @@ namespace WinStoreKing
         protected override void Update(GameTime gameTime)
         {
             // TODO: Add your update logic here
+
+            //TODO: Temp bullshit, must wait for some real stuff
+            TimeSpan e = gameTime.ElapsedGameTime;
+            elapsedTime += e.Milliseconds;
+
+            if (elapsedTime > 1000)
+            {
+                elapsedTime = 0;
+                if (turn == 0)
+                    _table.EndRound();
+
+                if (_table.GetCardCount(order[turn]) == 0)
+                    _table.SetupHand(test_hand);
+
+                _table.PlayCard(test_hand[card], order[turn]);
+                turn = (turn + 1) % 4;
+                if (turn == 0)
+                    card = (card + 1) % 13;
+            }
 
             base.Update(gameTime);
         }
@@ -126,7 +153,8 @@ namespace WinStoreKing
             _spriteBatch.DrawString(_font, "1,2,3 ... testando",
                                     new Vector2(_width / 2, 0f), Color.Black);
 
-            _table.Draw(_spriteBatch, _width, _height);
+            _table.Resize(_width, _height);
+            _table.Draw(_spriteBatch);
 
             _spriteBatch.End();
 
