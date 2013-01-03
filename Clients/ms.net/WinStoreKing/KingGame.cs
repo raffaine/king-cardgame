@@ -1,6 +1,7 @@
 ﻿using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using RabbitMQ.Client;
 
 namespace WinStoreKing
@@ -10,6 +11,14 @@ namespace WinStoreKing
     /// </summary>
     public class KingGame : Game
     {
+        // Delegates for State Machines (Message Processing and Game State)
+        public delegate void DrawingDelegate(GameTime time);
+        public delegate void UpdateDelegate(GameTime time);
+        public Tuple<DrawingDelegate, UpdateDelegate> gameState;
+
+        private delegate void ProcessDelegate(string msg);
+        private ProcessDelegate currentProcess;
+
         // RabbitMQ Objects
         const string RABBITMQ_SERVER_HOSTNAME = "localhost";
         private IConnection _connection;
@@ -27,6 +36,9 @@ namespace WinStoreKing
         private SpriteFont _font;
 
         Table _table;
+        Menu _menu;
+        bool lbutton_pressed = false;
+
         int elapsedTime;
         int turn;
         int card;
@@ -67,12 +79,16 @@ namespace WinStoreKing
         {
             // Create a new SpriteBatch, which can be used to draw textures.
             _spriteBatch = new SpriteBatch(GraphicsDevice);
+            _menu = new Menu();
 
             // TODO: use this.Content to load your game content here
             try
             {
                 Card.deck = Content.Load<Texture2D>("cards");
-                _font = Content.Load<SpriteFont>("Font");
+                TextManager.Font = Content.Load<SpriteFont>("Font");
+
+                _menu.AddContent( Menu.NovoJogo, Content.Load<Texture2D>("MenuNew"));
+                _menu.AddContent( Menu.Regras, Content.Load<Texture2D>("MenuRules"));
             }
             catch (Exception e)
             {
@@ -80,7 +96,7 @@ namespace WinStoreKing
                 //TODO: Debug this shit!
                 string s = e.Message;
             }
-
+            
             // This is just to show some stuff ... will be removed
             Random r = new Random();
 
@@ -94,6 +110,9 @@ namespace WinStoreKing
             elapsedTime = 0;
             turn = 0;
             card = 0;
+
+            gameState = new Tuple<DrawingDelegate, UpdateDelegate>(GameMenuDraw, GameMenuUpdate);
+            
         }
 
         /// <summary>
@@ -113,9 +132,47 @@ namespace WinStoreKing
         protected override void Update(GameTime gameTime)
         {
             // TODO: Add your update logic here
+            if (gameState != null)
+                gameState.Item2(gameTime);
 
+            base.Update(gameTime);
+        }
+
+        /// <summary>
+        /// This is called when the game should draw itself.
+        /// </summary>
+        /// <param name="gameTime">Provides a snapshot of timing values.</param>
+        protected override void Draw(GameTime gameTime)
+        {
+            GraphicsDevice.Clear(Color.CornflowerBlue);
+
+            _spriteBatch.Begin();
+
+            if (gameState != null)
+                gameState.Item1(gameTime);
+
+            _spriteBatch.End();
+
+            base.Draw(gameTime);
+        }
+
+        protected void GameRunningDraw(GameTime time)
+        {
+            int _width = GraphicsDevice.PresentationParameters.BackBufferWidth;
+            int _height = GraphicsDevice.PresentationParameters.BackBufferHeight;
+
+            TextManager.Draw(_spriteBatch, "1,2,3 ... testando",
+                             new Vector2(_width / 2f, _height / 2f), 
+                             TextManager.TEXT_ALIGN.CENTER);
+
+            _table.Resize(_width, _height);
+            _table.Draw(_spriteBatch);
+        }
+
+        protected void GameRunningUpdate(GameTime time)
+        {
             //TODO: Temp bullshit, must wait for some real stuff
-            TimeSpan e = gameTime.ElapsedGameTime;
+            TimeSpan e = time.ElapsedGameTime;
             elapsedTime += e.Milliseconds;
 
             if (elapsedTime > 1000)
@@ -132,33 +189,50 @@ namespace WinStoreKing
                 if (turn == 0)
                     card = (card + 1) % 13;
             }
-
-            base.Update(gameTime);
         }
 
-        /// <summary>
-        /// This is called when the game should draw itself.
-        /// </summary>
-        /// <param name="gameTime">Provides a snapshot of timing values.</param>
-        protected override void Draw(GameTime gameTime)
+        protected void GameMenuDraw(GameTime time)
         {
-            GraphicsDevice.Clear(Color.CornflowerBlue);
-
-            // TODO: Add your drawing code here
-            _spriteBatch.Begin();
-
             int _width = GraphicsDevice.PresentationParameters.BackBufferWidth;
             int _height = GraphicsDevice.PresentationParameters.BackBufferHeight;
 
-            _spriteBatch.DrawString(_font, "1,2,3 ... testando",
-                                    new Vector2(_width / 2, 0f), Color.Black);
+            _menu.Resize(_width, _height);
+            _menu.Draw(_spriteBatch);
+        }
 
-            _table.Resize(_width, _height);
-            _table.Draw(_spriteBatch);
-
-            _spriteBatch.End();
-
-            base.Draw(gameTime);
+        protected void GameMenuUpdate(GameTime time)
+        {
+            MouseState st = Mouse.GetState();
+            
+            if (lbutton_pressed)
+            {
+                // If button alreay pressed check for release
+                if (st.LeftButton == ButtonState.Released)
+                {
+                    lbutton_pressed = false;
+                    int item = _menu.CheckSelected(new Point(st.X, st.Y));
+                    switch (item)
+                    {
+                        case Menu.NovoJogo:
+                            gameState = new Tuple<DrawingDelegate, UpdateDelegate>(GameRunningDraw, GameRunningUpdate);
+                            break;
+                        case Menu.Regras:
+                            var mi = new MenuItemTextVisualizer(king_rules);
+                            mi.Image = Content.Load<Texture2D>("TextVisualizer");
+                            _menu.Reset();
+                            _menu.AddSpecialContent(mi);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                // If not released, then mouse hover on menu
+                else
+                    _menu.SetMouseOver(new Point(st.X, st.Y));
+            }
+            //Otherwise check if it has been pressed right now
+            else
+                lbutton_pressed = (st.LeftButton == ButtonState.Pressed);
         }
 
         /// <summary>
@@ -222,5 +296,21 @@ namespace WinStoreKing
 
             _channel.BasicPublish("king", routingKey, props, messageBodyBytes);
         }
+
+        static string king_rules = "Decide-se o primeiro jogador a dar as cartas, atraves de sorteio.\n"
+                                   + "A hierarquia das cartas, em ordem decrescente, eh : As, Rei, Dama, Valete, 10 ... ate 2.\n"
+                                   + "O jogo desenrola-se sempre pela esquerda, iniciando-se pelo carteador, e ganha a rodada quem jogar a carta mais alta do primeiro naipe jogado nessa rodada, ou o maior trunfo jogado, se tiver sido declarado um trunfo na mao. Sao 13 as rodadas possiveis em cada mao.\n"
+                                   + "As cartas sao distribuidas totalmente, uma a uma.\n"
+                                   + "Jogo Individual\n"
+                                   + "Tambem conhecido como 'King Ind', eh um jogo individual e cada partida eh composta por seis maos ou jogadas negativas e quatro positivas. A contagem dos pontos pode ser feita apenas somando os pontos de cada jogador, sem discriminar em duas colunas. No final quem tiver o melhor saldo positivo sera o ganhador.\n"
+                                   + "Maos\nA soma dos pontos atribuidos aos jogadores nas seis maos negativas totaliza -1300. A soma dos pontos atribuidos aos jogadores nas quatro maos positivas (i.e. leiloes) totaliza +1300. No fim do jogo a soma dos pontos dos jogadores deve ser zero.\n"
+                                   + "Maos negativas\n"
+                                   + "- Vaza: O jogador que distribuiu as cartas joga uma carta qualquer, aberta. Todos os demais deverao servir aquele naipe, soh podendo descartar uma carta de outro naipe qualquer se nao tiver o naipe jogado. Quem ganhar uma rodada dara inicio a seguinte. No final, cada participante devera contar e anunciar, para marcacao, quantas rodadas fez. Cada rodada vale 20 pontos negativos. Para efeito de conferencia, o total desta jogada deve dar 260 pontos.\n"
+                                   + "- Copas: O objetivo eh nao receber rodadas que contenham cartas de Copas. Regra importante: eh proibido iniciar uma vaza com carta de Copas, tendo qualquer outro naipe na mao. Quem nao tiver condicoes de acompanhar o naipe jogado, podera descartar Copas ou carta de qualquer outro naipe, que considere mais perigoso. No final, contam-se as cartas de Copas recebidas por cada jogador. Cada carta de Copas vale 20 pontos negativos. O total de pontos da rodada eh 260.\n"
+                                   + "- Mulheres: Para cada Dama recolhida, o jogador perdera 50 pontos. O total da mao eh 200 pontos. Esta mao tambem eh conhecida como 'Damas'.\n"
+                                   + "- Homens: O objetivo eh nao ganhar vazas que contenham Reis ou Valetes. Cada uma destas cartas vale 30 pontos negativos e o total de pontos da mao eh 240. Esta mao tambem eh conhecida como 'Reis ou Valetes'.\n"
+                                   + "- King: Quem receber o Rei de Copas em uma rodada, perdera 160 pontos. Importante: Nenhum jogador podera iniciar rodada com Copas, enquanto tiver carta de qualquer outro naipe. O jogador que possuir o Rei de Copas eh obrigado a joga-lo na primeira oportunidade, seja, na primeira vez que nao possa acompanhar o naipe puxado, seja na primeira puxada de copas.\n"
+                                   + "- Duas Ultimas: O objectivo eh nao fazer as duas ultimas rodadas, como o proprio nome da jogada esta indicando. Para cada uma das ultimas rodadas feita, o jogador marca 90 pontos negativos, totalizando 180 pontos na mao.\n"
+                                   + "O total de pontos negativos dos quatro jogadores devera somar 1.300.";
     }
 }

@@ -48,6 +48,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Menu.cs" />
     <Compile Include="Properties\AssemblyWin7Info.cs" />
     <Compile Include="Card.cs" />
     <Compile Include="IPlayer.cs" />
@@ -55,9 +56,19 @@
     <Compile Include="Opponent.cs" />
     <Compile Include="Player.cs" />
     <Compile Include="Table.cs" />
+    <Compile Include="TextManager.cs" />
     <Compile Include="Win7Program.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Content\MenuNew.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Content\MenuRules.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Content\TextVisualizer.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <None Include="App.win7.config" />
     <Content Include="Content\Font.xnb">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
