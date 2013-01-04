@@ -52,11 +52,23 @@ namespace WinStoreKing
     {
         protected int numCards;
         protected string _name;
+        protected Rectangle area;
+        protected float angle;
 
         public string Name
         {
             get { return _name; }
             set { _name = value; }
+        }
+        public Rectangle Area
+        {
+            get { return area; }
+            set { area = value; }
+        }
+        public float Angle
+        {
+            get { return angle; }
+            set { angle = value; }
         }
 
         public BaseOpponent(string name)
@@ -87,6 +99,12 @@ namespace WinStoreKing
         IEnumerator IEnumerable.GetEnumerator()
         {
             return (IEnumerator) GetEnumerator();
+        }
+
+
+        public void DefineArea(Vector2 size, float angle, int w, int h)
+        {
+            throw new NotImplementedException();
         }
     }
 

@@ -221,6 +221,7 @@ namespace WinStoreKing
                             mi.Image = Content.Load<Texture2D>("TextVisualizer");
                             _menu.Reset();
                             _menu.AddSpecialContent(mi);
+                            _menu.AddContent( Menu.NovoJogo, Content.Load<Texture2D>("MenuNew"));
                             break;
                         default:
                             break;
@@ -297,6 +298,7 @@ namespace WinStoreKing
             _channel.BasicPublish("king", routingKey, props, messageBodyBytes);
         }
 
+        // Oh bullshit ... maybe some easy Rss feeder here would help
         static string king_rules = "Decide-se o primeiro jogador a dar as cartas, atraves de sorteio.\n"
                                    + "A hierarquia das cartas, em ordem decrescente, eh : As, Rei, Dama, Valete, 10 ... ate 2.\n"
                                    + "O jogo desenrola-se sempre pela esquerda, iniciando-se pelo carteador, e ganha a rodada quem jogar a carta mais alta do primeiro naipe jogado nessa rodada, ou o maior trunfo jogado, se tiver sido declarado um trunfo na mao. Sao 13 as rodadas possiveis em cada mao.\n"

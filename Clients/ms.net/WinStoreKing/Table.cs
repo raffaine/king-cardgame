@@ -56,6 +56,19 @@ namespace WinStoreKing
             width = w;
             height = h;
             center = new Vector2(w / 2f, h / 2f);
+
+            players[(int)POSITIONS.PLAYER].DefineArea(new Vector2(.8f * w, .3f * h), 0f, w, h);
+            //players[(int)POSITIONS.PLAYER].Area = new Rectangle((int)(.1f*w), (int)(.7f*h),
+            //                                                    (int)(.8f*w), (int)(.3f*h));
+
+            //players[(int)POSITIONS.LEFT].Area = new Rectangle(  (int)(.3f*w), (int)(.7f*h),
+            //                                                    (int)(.8f*w), (int)(.3f*h));
+
+            //players[(int)POSITIONS.TOP].Area = new Rectangle(   (int)(.1f*w), (int)(.7f*h),
+            //                                                    (int)(.8f*w), (int)(.3f*h));
+
+            //players[(int)POSITIONS.RIGHT].Area = new Rectangle( (int)(.1f*w), (int)(.7f*h),
+            //                                                    (int)(.8f*w), (int)(.3f*h));
         }
 
         public void SetupHand(string[] cards)

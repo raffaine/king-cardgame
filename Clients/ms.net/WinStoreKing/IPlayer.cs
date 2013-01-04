@@ -14,6 +14,11 @@ namespace WinStoreKing
         string Name
         { get; set; }
 
+        Rectangle Area
+        { get; }
+
+        void DefineArea(Vector2 size, float angle, int w, int h);
+
         int CardCount();
 
         void PlayCard(string card);

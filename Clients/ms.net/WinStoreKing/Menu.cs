@@ -207,14 +207,21 @@ namespace WinStoreKing
             if( menuItens.Count == 0 )
                 return;
 
+            float sum = 0f;
+            foreach (var mi in menuItens)
+                sum += mi.Image.Height;
+
+            float empty = h - sum;
+
             float pos_x = w/2f;
-            float diff = h/(menuItens.Count+1f);
-            float pos_y = diff;
+            float diff = empty/(menuItens.Count+1f);
+            float pos_y = 0f;
 
             foreach (MenuItem mi in menuItens)
             {
+                pos_y += diff + mi.Image.Height/2f;
                 mi.Position = new Vector2(pos_x, pos_y);
-                pos_y += diff;
+                pos_y += mi.Image.Height/2f;
             }
         }
 

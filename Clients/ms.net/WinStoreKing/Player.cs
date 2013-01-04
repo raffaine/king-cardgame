@@ -12,7 +12,7 @@ namespace WinStoreKing
     class Player : IPlayer
     {
         List<Card> hand;
-
+        Rectangle area;
         string _name;
 
         public string Name
@@ -63,6 +63,32 @@ namespace WinStoreKing
         {
             return new Vector2(.1f * width + Card.card_x_size / 2,
                                height - (Card.card_y_size / 2));
+        }
+
+
+        public Rectangle Area
+        {
+            get
+            {
+                return area;
+            }
+        }
+
+
+        public void DefineArea(Vector2 size, float angle, int w, int h)
+        {
+            double cosA = Math.Cos((double)angle);
+            double sinA = Math.Sin((double)angle);
+
+            //int nw = (int)(w * cosA) + (int)(h * sinA);
+            //int nh = (int)(h * cosA) + (int)(w * sinA);
+
+            size.X = (int)(size.X * cosA) + (int)(size.Y * sinA);
+            size.Y = (int)(size.Y * cosA) + (int)(size.X * sinA);
+
+            int nw = (int)(((0.2*(1.0+cosA)/2.0) + 0.2*((1.0-cosA)/2.0)*cosA) * w);
+            int nh = (int)(0.2f * h);
+            area = new Rectangle(); 
         }
     }
 }
