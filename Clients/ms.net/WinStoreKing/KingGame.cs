@@ -96,7 +96,7 @@ namespace WinStoreKing
                 //TODO: Debug this shit!
                 string s = e.Message;
             }
-            
+
             // This is just to show some stuff ... will be removed
             Random r = new Random();
 

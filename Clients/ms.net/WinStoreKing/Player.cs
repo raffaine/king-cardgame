@@ -56,15 +56,14 @@ namespace WinStoreKing
 
         public Vector2 getIncrement(int width, int height)
         {
-            return new Vector2(.8f * width / hand.Count, 0f);
+            return new Vector2(area.Width / hand.Count, 0f);
         }
 
         public Vector2 getStartPos(int width, int height)
         {
-            return new Vector2(.1f * width + Card.card_x_size / 2,
-                               height - (Card.card_y_size / 2));
+            return new Vector2(area.X + Card.card_x_size / 2,
+                               area.Y + area.Height/2f /*+ (Card.card_y_size / 2)*/);
         }
-
 
         public Rectangle Area
         {
@@ -74,21 +73,33 @@ namespace WinStoreKing
             }
         }
 
+        static T easy_select<T>(T one, T two, double cosA)
+        {
+            if (Math.Abs(cosA) > 0.2)
+                return one;
+
+            return two;
+        }
 
         public void DefineArea(Vector2 size, float angle, int w, int h)
         {
             double cosA = Math.Cos((double)angle);
             double sinA = Math.Sin((double)angle);
 
-            //int nw = (int)(w * cosA) + (int)(h * sinA);
-            //int nh = (int)(h * cosA) + (int)(w * sinA);
+            Vector2 center = new Vector2(w / 2, h / 2);
 
-            size.X = (int)(size.X * cosA) + (int)(size.Y * sinA);
-            size.Y = (int)(size.Y * cosA) + (int)(size.X * sinA);
+            Vector2 newSize = new Vector2(easy_select(size.X, size.Y, cosA),
+                                          easy_select(size.Y, size.X, cosA));
 
-            int nw = (int)(((0.2*(1.0+cosA)/2.0) + 0.2*((1.0-cosA)/2.0)*cosA) * w);
-            int nh = (int)(0.2f * h);
-            area = new Rectangle(); 
+            Vector2 diff = new Vector2(easy_select(0f ,center.X - size.X/2f, cosA),
+                                       easy_select(center.Y - size.Y / 2f, 0f, cosA));
+
+            Vector2 newCenter = center + ((float)easy_select(cosA, -sinA, cosA)) * diff;
+
+            
+            area = new Rectangle((int)(newCenter.X - newSize.X/2f),
+                                 (int)(newCenter.Y - newSize.Y/2f),
+                                 (int) size.X, (int) size.Y ); 
         }
     }
 }

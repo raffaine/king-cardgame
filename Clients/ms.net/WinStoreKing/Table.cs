@@ -57,7 +57,7 @@ namespace WinStoreKing
             height = h;
             center = new Vector2(w / 2f, h / 2f);
 
-            players[(int)POSITIONS.PLAYER].DefineArea(new Vector2(.8f * w, .3f * h), 0f, w, h);
+            players[(int)POSITIONS.PLAYER].DefineArea(new Vector2(.8f * w, 1.1f*Card.card_y_size), 0f, w, h);
             //players[(int)POSITIONS.PLAYER].Area = new Rectangle((int)(.1f*w), (int)(.7f*h),
             //                                                    (int)(.8f*w), (int)(.3f*h));
 
