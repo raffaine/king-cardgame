@@ -419,7 +419,7 @@ namespace WinStoreKing
         private void DefineHand(string msg)
         {
             //TODO: Is better to check for error condition
-            _table.Hand = msg.TrimStart("HAND ".ToCharArray());
+            _table.Hand = msg.Remove(0, "HAND ".Length);
             currentProcess = RoundPlay;
         }
 

@@ -94,5 +94,18 @@ namespace WinStoreKing
         {
             return card;
         }
+
+        //Helper function to sort card arrays
+
+        public static int comnpare(string c1, string c2)
+        {
+            // First find the relative value of the card 
+            // ((x+12)%13 is to rotate de Ace)
+            var val1 = (Array.IndexOf(values, c1.Substring(0, c1.Length - 1)) + 12) % 13;
+            var val2 = (Array.IndexOf(values, c2.Substring(0, c2.Length - 1)) + 12) % 13;
+
+            // This *100 is to group the suits and then sort the values
+            return (c1[c1.Length-1] - c2[c2.Length-1])*100 + (val1 - val2);
+        }
     }
 }

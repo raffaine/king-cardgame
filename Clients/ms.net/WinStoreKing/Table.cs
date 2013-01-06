@@ -76,6 +76,9 @@ namespace WinStoreKing
 
         public void SetupHand(string[] cards)
         {
+            // Sort card array and give it to players,
+            // Reset opponents card count
+            Array.Sort(cards, Card.comnpare);
             for (int i = 0; i < 4; ++i)
             {
                 if (i == (int) POSITIONS.PLAYER)
@@ -235,11 +238,6 @@ namespace WinStoreKing
             batch.Draw(_dealertex, center+dpos, null, Color.White,
                        (float)(Math.PI/2f)*dealer, new Vector2(50f,50f), 
                        1f, SpriteEffects.None, 0f);
-        }
-
-        public static string[] SortCards(string[] cards)
-        {
-            return cards;    
         }
     }
 }
