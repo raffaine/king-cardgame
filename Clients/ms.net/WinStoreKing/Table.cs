@@ -29,6 +29,17 @@ namespace WinStoreKing
         int height;
         Vector2 center;
 
+        public static Texture2D _background;
+        public static Texture2D _dealertex;
+        int _backnx, _backny;
+
+        string hand;
+        public string Hand 
+        { 
+            get { return hand; }
+            set { hand = value; }
+        }
+
         public Table(string[] order, string player)
         {
             table = new List<Card>();
@@ -45,10 +56,9 @@ namespace WinStoreKing
             turn = dealer;
         }
 
-        //TODO: Useless ... remove later.
-        public int GetCardCount(string player)
+        public bool isPlayerTurn()
         {
-            return Array.Find(players, e => e.Name == player).CardCount();
+            return (turn == (int)POSITIONS.PLAYER);
         }
 
         public void Resize(int w, int h)
@@ -57,18 +67,11 @@ namespace WinStoreKing
             height = h;
             center = new Vector2(w / 2f, h / 2f);
 
-            players[(int)POSITIONS.PLAYER].DefineArea(new Vector2(.8f * w, 1.1f*Card.card_y_size), 0f, w, h);
-            //players[(int)POSITIONS.PLAYER].Area = new Rectangle((int)(.1f*w), (int)(.7f*h),
-            //                                                    (int)(.8f*w), (int)(.3f*h));
+            _backnx = (int)Math.Ceiling(w / 512.0);
+            _backny = (int)Math.Ceiling(h / 512.0);
 
-            //players[(int)POSITIONS.LEFT].Area = new Rectangle(  (int)(.3f*w), (int)(.7f*h),
-            //                                                    (int)(.8f*w), (int)(.3f*h));
-
-            //players[(int)POSITIONS.TOP].Area = new Rectangle(   (int)(.1f*w), (int)(.7f*h),
-            //                                                    (int)(.8f*w), (int)(.3f*h));
-
-            //players[(int)POSITIONS.RIGHT].Area = new Rectangle( (int)(.1f*w), (int)(.7f*h),
-            //                                                    (int)(.8f*w), (int)(.3f*h));
+            foreach (IPlayer p in players)
+                p.Resize(w, h);
         }
 
         public void SetupHand(string[] cards)
@@ -116,21 +119,96 @@ namespace WinStoreKing
             // TODO: Here comes the animation!
             table.Add(c);
             players[pos].PlayCard(card);
+
+            turn = (turn + 1) % 4;
         }
 
         //TODO: Enhance this one
-        public void EndRound()
+        public void EndRound(string next_player)
         {
             table.Clear();
+
+            turn = Array.FindIndex(players, e => e.Name == next_player);
+        }
+
+        public void EndHand()
+        {
+            //TODO: Here I receive some final scores for the hand
+            dealer = (dealer + 1) % 4;
+            turn = dealer;
+        }
+
+        public void SetMouseOver(Point pos)
+        {
+            IPlayer p = players[(int)POSITIONS.PLAYER];
+
+            Vector2 diff = p.getIncrement();
+            Vector2 start = p.getStartPos();
+            start.X -= Card.card_x_size / 2f;
+
+            Vector2 curpos = start;
+            int base_y = (int)(start.Y - Card.card_y_size/2f);
+
+            foreach (Card c in p)
+            {
+                Rectangle r = new Rectangle((int)curpos.X,
+                                             base_y,
+                                             Math.Min((int)diff.X, Card.card_x_size),
+                                             Card.card_y_size);
+                c.SetMouseOver(r.Contains(pos));
+                curpos += diff;
+            }
+        }
+
+        public Card GetClicked(Point pos)
+        {
+            IPlayer p = players[(int)POSITIONS.PLAYER];
+
+            Vector2 diff = p.getIncrement();
+            Vector2 start = p.getStartPos();
+            start.X -= Card.card_x_size / 2f;
+
+            Vector2 curpos = start;
+            int base_y = (int)(start.Y - Card.card_y_size / 2f);
+
+            foreach (Card c in p)
+            {
+                Rectangle r = new Rectangle((int)curpos.X,
+                                             base_y,
+                                             Math.Min((int)diff.X, Card.card_x_size),
+                                             Card.card_y_size);
+                if (r.Contains(pos))
+                    return c;
+
+                curpos += diff;
+            }
+
+            return null;
         }
 
         public void Draw(SpriteBatch batch)
         {
-            // Draw Player's Hands
+            // Draw background
+            for (int y = 0; y < _backny; ++y)
+            {
+                for (int x = 0; x < _backnx; ++x)
+                    batch.Draw(_background, new Vector2(512f * x, 512f * y), Color.White);
+            }
+
+            // Draw Game name
+            if (hand != null)
+                TextManager.Draw(batch, hand, center, TextManager.TEXT_ALIGN.CENTER);
+
+            // Draw Player's Hands and Names
             foreach (IPlayer player in players)
             {
-                Vector2 diff = player.getIncrement(width, height);
-                Vector2 pos = player.getStartPos(width, height);
+                TextManager.Draw( batch,
+                                  player.Name,
+                                  player.getNamePos(),
+                                  TextManager.TEXT_ALIGN.CENTER);
+
+                Vector2 diff = player.getIncrement();
+                Vector2 pos = player.getStartPos();
 
                 foreach (Card c in player)
                 {
@@ -143,6 +221,25 @@ namespace WinStoreKing
             //Draw Table Cards
             foreach (Card c in table)
                 c.Draw(batch);
+
+            // Draw Dealer Button
+            var mat = Matrix.CreateRotationZ((float)(Math.PI / 2.0 * (dealer - 3)));
+            Vector2 sizes = new Vector2(.5f * width, .45f * height);
+            Vector2 basis = new Vector2(1f,-1f);
+            basis.Normalize();
+            
+            Vector2 dpos = Vector2.Transform(basis, mat);
+            dpos.X *= sizes.X;
+            dpos.Y *= sizes.Y;
+
+            batch.Draw(_dealertex, center+dpos, null, Color.White,
+                       (float)(Math.PI/2f)*dealer, new Vector2(50f,50f), 
+                       1f, SpriteEffects.None, 0f);
+        }
+
+        public static string[] SortCards(string[] cards)
+        {
+            return cards;    
         }
     }
 }

@@ -61,7 +61,7 @@ class HumanClient(Game):
         self.table_order = self.order                
 
     def startRound(self, message):
-        if message == 'HAND:
+        if message == 'HAND':
             self.actual_hand = ' '.join(message.split()[1:])
         Game.startRound(self, message)
 

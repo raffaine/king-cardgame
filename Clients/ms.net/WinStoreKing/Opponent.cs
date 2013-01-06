@@ -63,7 +63,6 @@ namespace WinStoreKing
         public Rectangle Area
         {
             get { return area; }
-            set { area = value; }
         }
         public float Angle
         {
@@ -74,6 +73,7 @@ namespace WinStoreKing
         public BaseOpponent(string name)
         {
             _name = name;
+            area = new Rectangle();
             SetHand(null);
         }
 
@@ -93,18 +93,14 @@ namespace WinStoreKing
         }
 
         public abstract IEnumerator<Card> GetEnumerator();
-        public abstract Vector2 getIncrement(int width, int height);
-        public abstract Vector2 getStartPos(int width, int height);
+        public abstract void Resize(int w, int h);
+        public abstract Vector2 getIncrement();
+        public abstract Vector2 getStartPos();
+        public abstract Vector2 getNamePos();
 
         IEnumerator IEnumerable.GetEnumerator()
         {
             return (IEnumerator) GetEnumerator();
-        }
-
-
-        public void DefineArea(Vector2 size, float angle, int w, int h)
-        {
-            throw new NotImplementedException();
         }
     }
 
@@ -120,15 +116,28 @@ namespace WinStoreKing
             return new FakeHand(numCards, (float)Math.PI/2f);
         }
 
-        public override Vector2 getIncrement(int width, int height)
+        public override Vector2 getIncrement()
         {
-            return new Vector2(0f, .6f * height / numCards);
+            return new Vector2(0f, area.Height / (numCards + 1));
         }
 
-        public override Vector2 getStartPos(int width, int height)
+        public override Vector2 getStartPos()
         {
-            return new Vector2(5f + Card.card_y_size / 2f,
-                               .2f * height);
+            return new Vector2(area.X + area.Width/2,
+                               area.Y);
+        }
+
+        public override void Resize(int w, int h)
+        {
+            area.X = (int)(0.05f * Card.card_y_size);
+            area.Y = (int)(0.15 * h);
+            area.Width = (int)(1.05f * Card.card_y_size);
+            area.Height = h - 2*area.Y;
+        }
+
+        public override Vector2 getNamePos()
+        {
+            return new Vector2(area.Center.X, area.Y - Card.card_x_size);
         }
     }
 
@@ -144,15 +153,28 @@ namespace WinStoreKing
             return new FakeHand(numCards, -(float)Math.PI / 2f);
         }
 
-        public override Vector2 getIncrement(int width, int height)
+        public override Vector2 getIncrement()
         {
-            return new Vector2(0f, .6f * height / numCards);
+            return new Vector2(0f, area.Height / (numCards + 1));
         }
 
-        public override Vector2 getStartPos(int width, int height)
+        public override Vector2 getStartPos()
         {
-            return new Vector2(width - (5f + Card.card_y_size / 2f),
-                                .2f * height);
+            return new Vector2(area.X + area.Width / 2,
+                               area.Y);
+        }
+
+        public override void Resize(int w, int h)
+        {
+            area.X = w - (int)(1.1f * Card.card_y_size);
+            area.Y = (int)(0.15 * h);
+            area.Width = w - area.X;
+            area.Height = h - 2 * area.Y;
+        }
+
+        public override Vector2 getNamePos()
+        {
+            return new Vector2(area.Center.X, area.Y - Card.card_x_size);
         }
     }
 
@@ -168,15 +190,28 @@ namespace WinStoreKing
             return new FakeHand(numCards, (float)Math.PI);
         }
 
-        public override Vector2 getIncrement(int width, int height)
+        public override Vector2 getIncrement()
         {
-            return new Vector2(.6f * width / numCards, 0f);
+            return new Vector2(area.Width / (numCards + 1), 0f);
         }
 
-        public override Vector2 getStartPos(int width, int height)
+        public override Vector2 getStartPos()
         {
-            return new Vector2(.2f * width + Card.card_x_size / 2,
-                               Card.card_y_size / 2);
+            return new Vector2(area.X + Card.card_x_size / 2,
+                               area.Y + area.Height / 2);
+        }
+
+        public override void Resize(int w, int h)
+        {
+            area.X = (int)(0.2f * w);
+            area.Y = (int)(0.05f * Card.card_y_size);
+            area.Width = w - 2 * area.X;
+            area.Height = (int)(1.05f * Card.card_y_size);
+        }
+
+        public override Vector2 getNamePos()
+        {
+            return new Vector2(area.Center.X, 1.2f * area.Height);
         }
     }
 }

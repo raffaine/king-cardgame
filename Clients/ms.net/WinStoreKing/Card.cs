@@ -29,6 +29,7 @@ namespace WinStoreKing
         Vector2 position;
         Vector2 origin;
         float angle;
+        Vector2 offset;
 
         //Accessors
         public Vector2 Position
@@ -50,6 +51,7 @@ namespace WinStoreKing
             position = new Vector2(0, 0);
             origin = new Vector2(card_x_size / 2, card_y_size / 2);
             angle = 0f;
+            offset = new Vector2(0,0);
             //TODO: Check if its a valid combination of Value and suit
             if (value.Length == 0)
                 deck_pos = new Rectangle(back_card_x, back_card_y,
@@ -62,8 +64,16 @@ namespace WinStoreKing
 
         public void Draw(SpriteBatch batch)
         {
-            batch.Draw(deck, position, deck_pos, Color.White,
+            batch.Draw(deck, position+offset, deck_pos, Color.White,
                        angle, origin, 1f, SpriteEffects.None, 0f);
+        }
+
+        public void SetMouseOver(bool val)
+        {
+            if (val)
+                offset.Y = -(.3f*card_y_size);
+            else
+                offset.Y = 0f;
         }
 
         // Object overloaded methods

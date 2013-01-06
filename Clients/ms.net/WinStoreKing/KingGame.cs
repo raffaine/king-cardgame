@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Linq;
+using System.Text;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -11,39 +13,39 @@ namespace WinStoreKing
     /// </summary>
     public class KingGame : Game
     {
-        // Delegates for State Machines (Message Processing and Game State)
+        #region Delegates for State Machines (Message Processing and Game State)
         public delegate void DrawingDelegate(GameTime time);
         public delegate void UpdateDelegate(GameTime time);
         public Tuple<DrawingDelegate, UpdateDelegate> gameState;
-
+        
         private delegate void ProcessDelegate(string msg);
         private ProcessDelegate currentProcess;
+        #endregion
 
-        // RabbitMQ Objects
+        #region RabbitMQ Objects
         const string RABBITMQ_SERVER_HOSTNAME = "localhost";
-        private IConnection _connection;
+        private IConnection _connection = null;
         private IModel _channel;
         private string _queueName;
 
         // RabbitMQ Table Parameters
         private string _tableName = null;
+        #endregion
 
-        // MonoGame Objects
+        #region MonoGame Objects and Game Resources
         GraphicsDeviceManager _graphics;
         SpriteBatch _spriteBatch;
 
         // Game Resources
-        private SpriteFont _font;
-
         Table _table;
         Menu _menu;
         bool lbutton_pressed = false;
 
-        int elapsedTime;
-        int turn;
-        int card;
-        string[] order = { "D2", "3Horas", "Regiane", "Samurai" };
-        string[] test_hand = new string[13];
+        int elapsedTime = 0;
+        string[] order;
+        // TODO: Must get from user input!!!
+        string player_name = "Bob";
+        #endregion
 
         public KingGame()
         {
@@ -85,6 +87,8 @@ namespace WinStoreKing
             try
             {
                 Card.deck = Content.Load<Texture2D>("cards");
+                Table._background = Content.Load<Texture2D>("back");
+                Table._dealertex = Content.Load<Texture2D>("dealer");
                 TextManager.Font = Content.Load<SpriteFont>("Font");
 
                 _menu.AddContent( Menu.NovoJogo, Content.Load<Texture2D>("MenuNew"));
@@ -96,21 +100,7 @@ namespace WinStoreKing
                 //TODO: Debug this shit!
                 string s = e.Message;
             }
-
-            // This is just to show some stuff ... will be removed
-            Random r = new Random();
-
-            _table = new Table(order, "3Horas");
-
-            for (int i = 0; i < test_hand.Length; ++i)
-                test_hand[i] = Card.values[r.Next(13)] + Card.suits[r.Next(4)];
-
-            _table.SetupHand(test_hand);
-
-            elapsedTime = 0;
-            turn = 0;
-            card = 0;
-
+            // Establish the Menu as the first gamestate
             gameState = new Tuple<DrawingDelegate, UpdateDelegate>(GameMenuDraw, GameMenuUpdate);
             
         }
@@ -161,9 +151,13 @@ namespace WinStoreKing
             int _width = GraphicsDevice.PresentationParameters.BackBufferWidth;
             int _height = GraphicsDevice.PresentationParameters.BackBufferHeight;
 
-            TextManager.Draw(_spriteBatch, "1,2,3 ... testando",
-                             new Vector2(_width / 2f, _height / 2f), 
-                             TextManager.TEXT_ALIGN.CENTER);
+            if (_table == null)
+            {
+                TextManager.Draw(_spriteBatch, "Aguarde, carregando a mesa",
+                                new Vector2(_width / 2f, _height / 2f),
+                                TextManager.TEXT_ALIGN.CENTER);
+                return;
+            }
 
             _table.Resize(_width, _height);
             _table.Draw(_spriteBatch);
@@ -171,23 +165,58 @@ namespace WinStoreKing
 
         protected void GameRunningUpdate(GameTime time)
         {
-            //TODO: Temp bullshit, must wait for some real stuff
+            //TODO: Redesign this Update Loop ... 
+            // I need to wait after each card played
             TimeSpan e = time.ElapsedGameTime;
             elapsedTime += e.Milliseconds;
 
             if (elapsedTime > 1000)
             {
+                try
+                {
+                    BasicGetResult result = _channel.BasicGet(_queueName, false);
+                    if (result != null)
+                    {
+                        //IBasicProperties props = result.BasicProperties;
+                        string msg = Encoding.UTF8.GetString(result.Body, 0, result.Body.Length);
+                        // Processa a mensagem com o Delegate atual
+                        currentProcess(msg);
+                        // Envia um ack para o server
+                        _channel.BasicAck(result.DeliveryTag, false);
+                    }
+                }
+                //TODO Provide a more clear exception handle
+                catch (Exception ex)
+                {
+                    //TODO Handle trouble here
+                    string s = ex.Message;
+                }
+
+                //TODO Extend this part to get other user's input
+                // Like selection of Table, Hand, Positive Auction and Trunf
+                if ((_table != null) && (_table.isPlayerTurn()))
+                {
+                    var st = Mouse.GetState();
+                    Card sel = null;
+
+                    if (lbutton_pressed && (st.LeftButton == ButtonState.Released))
+                    {
+                        sel = _table.GetClicked(new Point(st.X, st.Y));
+                        lbutton_pressed = false;
+                    }
+                    else if (st.LeftButton == ButtonState.Pressed)
+                    {
+                        _table.SetMouseOver(new Point(st.X, st.Y));
+                        lbutton_pressed = true;
+                    }
+
+                    if (sel == null)
+                        return;
+
+                    PublishTable("play", sel.ToString());
+                }
+
                 elapsedTime = 0;
-                if (turn == 0)
-                    _table.EndRound();
-
-                if (_table.GetCardCount(order[turn]) == 0)
-                    _table.SetupHand(test_hand);
-
-                _table.PlayCard(test_hand[card], order[turn]);
-                turn = (turn + 1) % 4;
-                if (turn == 0)
-                    card = (card + 1) % 13;
             }
         }
 
@@ -214,6 +243,7 @@ namespace WinStoreKing
                     switch (item)
                     {
                         case Menu.NovoJogo:
+                            StartGameServer(true);
                             gameState = new Tuple<DrawingDelegate, UpdateDelegate>(GameRunningDraw, GameRunningUpdate);
                             break;
                         case Menu.Regras:
@@ -242,28 +272,36 @@ namespace WinStoreKing
         /// <param name="SinglePlayer">Wich form of game will be played?</param>
         private void StartGameServer(bool SinglePlayer)
         {
-            ConnectionFactory cf = new ConnectionFactory();
-            cf.HostName = RABBITMQ_SERVER_HOSTNAME;
+            if (_connection == null)
+            {
+                ConnectionFactory cf = new ConnectionFactory();
+                cf.HostName = RABBITMQ_SERVER_HOSTNAME;
 
-            _connection = cf.CreateConnection();
-            _channel = _connection.CreateModel();
+                _connection = cf.CreateConnection();
+                _channel = _connection.CreateModel();
 
-            _queueName = _channel.QueueDeclare(); //The default is an exclusive non-durable queue
+                //The default is an exclusive non-durable queue
+                _queueName = _channel.QueueDeclare();
 
-            // Use methods above to establish a blocking connection
-            // The consumer must be declared in Class Scope, for reuse
-            //consumer = new QueueingBasicConsumer(channel);
-            //channel.BasicConsume(queue_name, false, consumer);
+                #region General comments
+                // Use methods above to establish a blocking connection
+                // The consumer must be declared in Class Scope, for reuse
+                // Now I'm using unblocking get that I think it's better
+                //consumer = new QueueingBasicConsumer(channel);
+                //channel.BasicConsume(queue_name, false, consumer);
+                #endregion
+            }
 
+            elapsedTime = 0;
             if (SinglePlayer)
             {
                 PublishHall("agenthall.createTable", "single");
-                //process = createTable;
+                currentProcess = CreateTable;
             }
             else
             {
                 PublishHall("agenthall.listTable", "open");
-                //process = ListTables;
+                currentProcess = ListTables;
             }
         }
 
@@ -298,6 +336,136 @@ namespace WinStoreKing
             _channel.BasicPublish("king", routingKey, props, messageBodyBytes);
         }
 
+        private void ListTables(string msg)
+        {
+            //TODO: Complete Redesign needed
+            _tableName = null;
+
+            char[] delim = { ',' };
+            string[] tables = msg.Replace('[', ' ').Replace(']', ' ').Trim().Split(delim);
+
+            if (msg != "[]")
+            {
+                // TODO ... I think that a new gameState will be necessary to handle
+                // user input
+                while (_tableName == null)
+                {
+                    uint pos = 0;
+                    //UInt32.TryParse(System.Console.ReadLine(), out pos);
+                    if (pos < tables.Length)
+                        _tableName = tables[pos].Replace("'", "");
+                }
+                PublishTable("join", player_name);
+                currentProcess = JoinTable;
+            }
+            else
+            {
+                PublishHall("agenthall.createTable", "empty");
+                currentProcess = CreateTable;
+            }
+        }
+
+        private void CreateTable(string msg)
+        {
+            _tableName = msg;
+            PublishTable("join", player_name);
+            currentProcess = JoinTable;
+        }
+
+        private void JoinTable(string msg)
+        {
+            if (msg != "OK")
+            {
+                //Some kind of failure ... like full table when playing multiplayer
+                //reset to listing
+                currentProcess = ListTables;
+            }
+            else
+            {
+                //Yeah ... let's wait for the start and then play!
+                currentProcess = StartGame;
+            }
+        }
+
+        private void StartGame(string msg)
+        {
+            //TODO If i'm multiplayer then wait not too much
+            order = ParseStringList(msg, "ORDER ");
+
+            _table = new Table(order, "Bob");
+
+            currentProcess = setupHand;
+        }
+
+        private void setupHand(string msg)
+        {
+            if (msg.StartsWith("GAMEOVER"))
+            {
+                //GAME IS OVER ... WHo knows what to do?
+                gameState = new Tuple<DrawingDelegate, UpdateDelegate>(GameMenuDraw, GameMenuUpdate);
+                return;
+            }
+            
+            string[] hand = ParseStringList(msg, "HAND ");
+
+            _table.SetupHand(hand);
+
+            if (_table.isPlayerTurn())
+                currentProcess = ChooseHand;
+            else
+                currentProcess = DefineHand;
+        }
+
+        private void DefineHand(string msg)
+        {
+            //TODO: Is better to check for error condition
+            _table.Hand = msg.TrimStart("HAND ".ToCharArray());
+            currentProcess = RoundPlay;
+        }
+
+        private void ChooseHand(string msg)
+        {
+            //TODO: Take user input here
+            string[] possible = ParseStringList(msg, "CHOOSE ");
+            PublishTable("chooseHand", possible[0]);
+
+            currentProcess = DefineHand;
+        }
+
+        private void RoundPlay(string msg)
+        { 
+            if (msg.StartsWith("ENDHAND"))
+            {
+                _table.EndHand();
+                currentProcess = setupHand;
+            }
+            else if (msg.StartsWith("ENDROUND"))
+            {
+                var values = msg.Split(' ');
+                string nextname = values[1];//msg.Substring(istart, msg.IndexOf(' ', istart + 1));
+                _table.EndRound(nextname);
+            }
+            else if (msg.StartsWith("PLAY"))
+            {
+                string[] values = msg.Split(" ".ToCharArray());
+                //TODO Values must be 3 values. eg PLAY who 3H
+                _table.PlayCard(values[values.Length - 1], values[1]);
+            }
+            // I'm not treating the error case ... it would be the else
+        }
+
+        static string[] ParseStringList(string str, string begin="")
+        {
+            char[] delim = { ',' };
+            string[] values = str.Remove(0, begin.Length).
+                                  Replace('[', ' ').Replace(']', ' ').Trim().
+                                  Split(delim);
+
+            return Enumerable.Select(values, 
+                                     x => x.Trim().Replace("'", "")).ToArray();
+        }
+
+        #region King Rules
         // Oh bullshit ... maybe some easy Rss feeder here would help
         static string king_rules = "Decide-se o primeiro jogador a dar as cartas, atraves de sorteio.\n"
                                    + "A hierarquia das cartas, em ordem decrescente, eh : As, Rei, Dama, Valete, 10 ... ate 2.\n"
@@ -314,5 +482,6 @@ namespace WinStoreKing
                                    + "- King: Quem receber o Rei de Copas em uma rodada, perdera 160 pontos. Importante: Nenhum jogador podera iniciar rodada com Copas, enquanto tiver carta de qualquer outro naipe. O jogador que possuir o Rei de Copas eh obrigado a joga-lo na primeira oportunidade, seja, na primeira vez que nao possa acompanhar o naipe puxado, seja na primeira puxada de copas.\n"
                                    + "- Duas Ultimas: O objectivo eh nao fazer as duas ultimas rodadas, como o proprio nome da jogada esta indicando. Para cada uma das ultimas rodadas feita, o jogador marca 90 pontos negativos, totalizando 180 pontos na mao.\n"
                                    + "O total de pontos negativos dos quatro jogadores devera somar 1.300.";
+        #endregion
     }
 }

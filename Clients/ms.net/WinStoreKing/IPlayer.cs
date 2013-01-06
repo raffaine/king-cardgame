@@ -17,15 +17,15 @@ namespace WinStoreKing
         Rectangle Area
         { get; }
 
-        void DefineArea(Vector2 size, float angle, int w, int h);
-
         int CardCount();
 
         void PlayCard(string card);
         void SetHand(string[] cards);
 
         //Helper Drawing Functions
-        Vector2 getIncrement(int width, int height);
-        Vector2 getStartPos(int width, int height);
+        void Resize(int w, int h);
+        Vector2 getIncrement();
+        Vector2 getStartPos();
+        Vector2 getNamePos();
     }
 }

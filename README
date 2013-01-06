@@ -55,6 +55,8 @@ Requerimentos para os Clients
    + DISCLAIMER: Os logos da aplicacao estao usando a imagem retirada
    dos sites: http://gamebanana.com/sprays/38097
    e http://www.behance.net/gallery/King-of-Hearts/424990
+   + DISCLAIMER: A imagem de fundo da mesa, foi retirada do site:
+   http://graphics.ucsd.edu/courses/rendering/2008/tkim/
    + DISCLAIMER: Como nao tenho VS2010 para gerar minhas proprias
    fontes, utilizei uma fonte que encontrei em um dos Samples da
    MonoGame: https://github.com/CartBlanche/MonoGame-Samples
