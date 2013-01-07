@@ -7,11 +7,10 @@ import time
 import subprocess
 import logging as log
 
-MYPATH = os.path.dirname(os.path.abspath(__file__))
-AGENT_PROG = os.path.join(MYPATH, 'kingAgent.py')
+AGENT_PROG = 'kingAgent.py'
 BOTS_NAMES = ['Regiane', 'Samurai', 'John']
 PYTHON_EXEC = sys.executable if sys.platform != 'win32' else "python.exe"
-BOTS_PROGS = {'easy':(PYTHON_EXEC, os.path.join(MYPATH, 'kingBot.py'))}
+BOTS_PROGS = {'easy':(PYTHON_EXEC,'kingBot.py')}
 
 class KingHallAgent:
 
