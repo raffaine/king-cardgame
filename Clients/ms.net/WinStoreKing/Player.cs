@@ -98,6 +98,10 @@ namespace WinStoreKing
         {
             return new Vector2(area.Center.X, area.Y-0.2f*(area.Height));
         }
-
+        
+        public float getNameAngle()
+        {
+            return 0f;
+        }
     }
 }

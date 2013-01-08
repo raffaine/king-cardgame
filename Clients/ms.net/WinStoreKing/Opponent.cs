@@ -53,7 +53,6 @@ namespace WinStoreKing
         protected int numCards;
         protected string _name;
         protected Rectangle area;
-        protected float angle;
         protected int lastscore;
         protected int score;
 
@@ -112,6 +111,11 @@ namespace WinStoreKing
         {
             return (IEnumerator) GetEnumerator();
         }
+
+        public virtual float getNameAngle()
+        {
+            return 0f;
+        }
     }
 
     class LeftOpponent : BaseOpponent
@@ -147,7 +151,12 @@ namespace WinStoreKing
 
         public override Vector2 getNamePos()
         {
-            return new Vector2(area.Center.X, area.Y - Card.card_x_size);
+            return new Vector2(area.X + 1.1f*area.Width, (area.Y + area.Height)/2f);
+        }
+
+        public override float getNameAngle()
+        {
+            return (float) Math.PI/2f;
         }
     }
 
@@ -184,7 +193,12 @@ namespace WinStoreKing
 
         public override Vector2 getNamePos()
         {
-            return new Vector2(area.Center.X, area.Y - Card.card_x_size);
+            return new Vector2(area.X - .1f*area.Width, (area.Y + area.Height) / 2f);
+        }
+
+        public override float getNameAngle()
+        {
+            return (float)-Math.PI / 2f;
         }
     }
 

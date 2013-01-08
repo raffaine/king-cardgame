@@ -225,7 +225,8 @@ namespace WinStoreKing
                                                 player.Name, player.LastScore,
                                                 player.Score + player.LastScore),
                                   player.getNamePos(),
-                                  TextManager.TEXT_ALIGN.CENTER);
+                                  TextManager.TEXT_ALIGN.CENTER, 1f,
+                                  player.getNameAngle());
 
                 Vector2 diff = player.getIncrement();
                 Vector2 pos = player.getStartPos();

@@ -33,5 +33,6 @@ namespace WinStoreKing
         Vector2 getIncrement();
         Vector2 getStartPos();
         Vector2 getNamePos();
+        float getNameAngle();
     }
 }
