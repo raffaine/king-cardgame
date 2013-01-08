@@ -138,10 +138,7 @@ namespace WinStoreKing
             turn = Array.FindIndex(players, e => e.Name == next_player);
 
             for (int i = 0; i < players.Length; ++i)
-            {
                 players[i].LastScore = score[(player_ind + i) % 4];
-                players[i].Score += score[(player_ind + i) % 4];
-            }
         }
 
         public void EndHand(int[] score, int[] total)
@@ -153,7 +150,10 @@ namespace WinStoreKing
 
             int pos = 0;
             foreach (IPlayer p in players)
+            {
+                p.LastScore = 0;
                 p.Score = total[(player_ind + pos++) % 4];
+            }
         }
 
         public void SetMouseOver(Point pos)
@@ -223,7 +223,7 @@ namespace WinStoreKing
                 TextManager.Draw( batch,
                                   String.Format("{0} ({1}, {2})", 
                                                 player.Name, player.LastScore,
-                                                player.Score),
+                                                player.Score + player.LastScore),
                                   player.getNamePos(),
                                   TextManager.TEXT_ALIGN.CENTER);
 
