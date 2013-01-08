@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.Xna.Framework;
@@ -39,9 +40,10 @@ namespace WinStoreKing
         // Game Resources
         Table _table;
         Menu _menu;
-        bool lbutton_pressed = false;
 
         int elapsedTime = 0;
+        bool lbutton_pressed = false;
+        
         string[] order;
         // TODO: Must get from user input!!!
         string player_name = "Bob";
@@ -394,10 +396,10 @@ namespace WinStoreKing
 
             _table = new Table(order, "Bob");
 
-            currentProcess = setupHand;
+            currentProcess = SetupHand;
         }
 
-        private void setupHand(string msg)
+        private void SetupHand(string msg)
         {
             if (msg.StartsWith("GAMEOVER"))
             {
@@ -436,14 +438,21 @@ namespace WinStoreKing
         { 
             if (msg.StartsWith("ENDHAND"))
             {
-                _table.EndHand();
-                currentProcess = setupHand;
+                string s1 = msg.Substring(8, msg.IndexOf(']') - 7);
+                int[] handscore = ParseIntList(s1);
+                int[] totalscore = ParseIntList(msg.Remove(0, 9 + s1.Length));
+
+                _table.EndHand(handscore, totalscore);
+                currentProcess = SetupHand;
             }
             else if (msg.StartsWith("ENDROUND"))
             {
-                var values = msg.Split(' ');
-                string nextname = values[1];//msg.Substring(istart, msg.IndexOf(' ', istart + 1));
-                _table.EndRound(nextname);
+                string[] values = msg.Split(' ');
+                string nextname = values[1];
+
+                int[] score = ParseIntList(msg.Remove(0, 10 + nextname.Length));
+
+                _table.EndRound(nextname, score);
             }
             else if (msg.StartsWith("PLAY"))
             {
@@ -463,6 +472,17 @@ namespace WinStoreKing
 
             return Enumerable.Select(values, 
                                      x => x.Trim().Replace("'", "")).ToArray();
+        }
+
+        static int[] ParseIntList(string str, string begin = "")
+        {
+            char[] delim = { ',' };
+            string[] values = str.Remove(0, begin.Length).
+                                  Replace('[', ' ').Replace(']', ' ').Trim().
+                                  Split(delim);
+
+            return Enumerable.Select(values,
+                                     x => Int32.Parse(x)).ToArray();
         }
 
         #region King Rules

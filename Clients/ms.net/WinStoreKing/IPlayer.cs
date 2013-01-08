@@ -17,6 +17,12 @@ namespace WinStoreKing
         Rectangle Area
         { get; }
 
+        int LastScore
+        { get; set; }
+
+        int Score 
+        { get; set; }
+
         int CardCount();
 
         void PlayCard(string card);

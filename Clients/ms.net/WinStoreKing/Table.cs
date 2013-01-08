@@ -21,7 +21,9 @@ namespace WinStoreKing
     {
         IPlayer[] players;
         List<Card> table;
+        List<int[]> scoreList;
 
+        int player_ind;
         int dealer;
         int turn;
 
@@ -43,16 +45,17 @@ namespace WinStoreKing
         public Table(string[] order, string player)
         {
             table = new List<Card>();
+            scoreList = new List<int[]>();
             players = new IPlayer[4];
-            int ind = Array.IndexOf(order, player);
+            player_ind = Array.IndexOf(order, player);
             //TODO: Check for a valid index?
 
             players[(int)POSITIONS.PLAYER] = new Player(player);
-            players[(int)POSITIONS.LEFT] = new LeftOpponent(order[(ind+1) % 4]);
-            players[(int)POSITIONS.TOP] = new TopOpponent(order[(ind+2) % 4]);
-            players[(int)POSITIONS.RIGHT] = new RightOpponent(order[(ind+3) % 4]);
+            players[(int)POSITIONS.LEFT] = new LeftOpponent(order[(player_ind + 1) % 4]);
+            players[(int)POSITIONS.TOP] = new TopOpponent(order[(player_ind + 2) % 4]);
+            players[(int)POSITIONS.RIGHT] = new RightOpponent(order[(player_ind + 3) % 4]);
 
-            dealer = (4 - ind) % 4;
+            dealer = (4 - player_ind) % 4;
             turn = dealer;
         }
 
@@ -81,6 +84,7 @@ namespace WinStoreKing
             Array.Sort(cards, Card.comnpare);
             for (int i = 0; i < 4; ++i)
             {
+                players[i].LastScore = 0;
                 if (i == (int) POSITIONS.PLAYER)
                     players[i].SetHand(cards);
                 else
@@ -127,18 +131,29 @@ namespace WinStoreKing
         }
 
         //TODO: Enhance this one
-        public void EndRound(string next_player)
+        public void EndRound(string next_player, int[] score)
         {
             table.Clear();
 
             turn = Array.FindIndex(players, e => e.Name == next_player);
+
+            for (int i = 0; i < players.Length; ++i)
+            {
+                players[i].LastScore = score[(player_ind + i) % 4];
+                players[i].Score += score[(player_ind + i) % 4];
+            }
         }
 
-        public void EndHand()
+        public void EndHand(int[] score, int[] total)
         {
-            //TODO: Here I receive some final scores for the hand
             dealer = (dealer + 1) % 4;
             turn = dealer;
+
+            scoreList.Add(score);
+
+            int pos = 0;
+            foreach (IPlayer p in players)
+                p.Score = total[(player_ind + pos++) % 4];
         }
 
         public void SetMouseOver(Point pos)
@@ -206,7 +221,9 @@ namespace WinStoreKing
             foreach (IPlayer player in players)
             {
                 TextManager.Draw( batch,
-                                  player.Name,
+                                  String.Format("{0} ({1}, {2})", 
+                                                player.Name, player.LastScore,
+                                                player.Score),
                                   player.getNamePos(),
                                   TextManager.TEXT_ALIGN.CENTER);
 

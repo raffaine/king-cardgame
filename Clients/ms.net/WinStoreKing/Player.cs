@@ -14,6 +14,8 @@ namespace WinStoreKing
         List<Card> hand;
         Rectangle area;
         string _name;
+        int lastscore;
+        int score;
 
         public string Name
         {
@@ -26,11 +28,24 @@ namespace WinStoreKing
             get { return area; }
         }
 
+        public int LastScore
+        {
+            get { return lastscore; }
+            set { lastscore = value; }
+        }
+
+        public int Score
+        {
+            get { return score; }
+            set { score = value; }
+        }
+
         public Player(string name)
         {
             _name = name;
             hand = new List<Card>();
             area = new Rectangle();
+            lastscore = 0;
         }
 
         public int CardCount()
@@ -83,5 +98,6 @@ namespace WinStoreKing
         {
             return new Vector2(area.Center.X, area.Y-0.2f*(area.Height));
         }
+
     }
 }

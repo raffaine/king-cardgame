@@ -54,20 +54,30 @@ namespace WinStoreKing
         protected string _name;
         protected Rectangle area;
         protected float angle;
+        protected int lastscore;
+        protected int score;
 
         public string Name
         {
             get { return _name; }
             set { _name = value; }
         }
+
         public Rectangle Area
         {
             get { return area; }
         }
-        public float Angle
+
+        public int LastScore
         {
-            get { return angle; }
-            set { angle = value; }
+            get { return lastscore; }
+            set { lastscore = value; }
+        }
+
+        public int Score
+        {
+            get { return score; }
+            set { score = value; }
         }
 
         public BaseOpponent(string name)
