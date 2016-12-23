@@ -121,7 +121,9 @@ if __name__ == "__main__":
         usr = sys.argv[1]
 
     srv = Server(usr)
-    srv.hunt_table()
+    if not srv.hunt_table():
+        print("Failed to join a table, exiting client")
+        exit()
 
     game = Game(srv)
     while not game.is_over:

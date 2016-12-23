@@ -213,6 +213,9 @@ class KingPlayer:
             return self.name == other.name and self.secret == other.secret
         return False
 
+    def __hash__(self):
+        return hash((self.name, self.secret))
+
 
 class KingTable:
 

@@ -33,7 +33,7 @@ def create_table(table_name):
     if table_name in tables:
         return 'ERROR Table already exists'
 
-    tables[table_name] = KingTable()
+    tables[table_name] = KingTable(table_name)
     return 'ACK'
 
 def list_tables():
@@ -85,11 +85,11 @@ def join_table(usr_name, secret, table_name):
 def start_hand(table):
     """ Messages used in hand start """
     # Distribute cards and inform players the starter
-    starter = table.setuphand()
-    status_publisher.send_string('%s STARTHAND %s', table.name, starter.name)
+    starter = table.setup_hand()
+    status_publisher.send_string('%s STARTHAND %s'%(table.name, starter.name))
 
     # Inform choices
-    choices = table.possible_hands()
+    choices = table.possible_hands(starter)
     status_publisher.send_string('%s CHOOSEGAME %s'%(table.name, ' '.join(choices)))
 
 def get_hand(usr_name, secret):
