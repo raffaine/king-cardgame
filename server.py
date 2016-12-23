@@ -84,13 +84,11 @@ def join_table(usr_name, secret, table_name):
 
 def start_hand(table):
     """ Messages used in hand start """
-    # Distribute cards and inform players the starter
+    # Distribute cards and inform players the starter and avilable game choices
     starter = table.setup_hand()
-    status_publisher.send_string('%s STARTHAND %s'%(table.name, starter.name))
-
-    # Inform choices
     choices = table.possible_hands(starter)
-    status_publisher.send_string('%s CHOOSEGAME %s'%(table.name, ' '.join(choices)))
+    status_publisher.send_string('%s STARTHAND %s %s'%(table.name, \
+                                 starter.name, ' '.join(choices)))
 
 def get_hand(usr_name, secret):
     """Game Logic: GetHand - Used to get a players hand"""
@@ -120,7 +118,7 @@ def choose_game(usr_name, secret, game):
     if not table:
         return 'ERROR Invalid Player'
 
-    if not table.start_hand(player, game):
+    if not table.start_hand(table.get_player(player), game):
         return 'ERROR Invalid action'
 
     # Inform players the chosen game
@@ -142,16 +140,16 @@ def play_card(usr_name, secret, card):
     if not table:
         return 'ERROR Invalid Player'
 
-    if not table.play_card(player, card):
+    if not table.play_card(table.get_player(player), card):
         return 'ERROR Invalid Action'
 
     # Inform players the card played
     status_publisher.send_string('%s PLAY %s'%(table.name, card))
 
-    # Check to see end of round
+    # Check for end of round
     rnd_winner = table.end_round()
     if rnd_winner:
-        # Check to see end of hand
+        # Check for end of hand
         if table.end_hand():
             # Check for a game over
             if table.end_game():
