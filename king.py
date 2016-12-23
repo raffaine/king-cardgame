@@ -33,8 +33,12 @@ class BaseGame:
         @param table is the current table state
         @param hand is the player hand
         @param play is the card player has chose"""
+        if not play in hand:
+            return False
+
         if not len(table):
             return True
+
         possible = list(filter(lambda x: x[-1] == table[0][-1], hand))
         return (not len(possible)) or (possible.count(play))
 
@@ -114,6 +118,9 @@ class Copas(BaseGame):
     # Player cannot play Hearts unless he only have Hearts
     #       or table started with Hearts
     def hand_constraint(self, table, hand, play):
+        if not play in hand:
+            return False
+
         if not len(table) and play[-1] == 'H':
             return not len(list(filter(lambda x: x[-1] != 'H', hand)))
         return BaseGame.hand_constraint(self, table, hand, play)
@@ -145,6 +152,9 @@ class King(BaseGame):
     # If Player has the King of Hearts and don't have the suit on table,
     #       HE MUST DISCARD THE KING OF HEARTS
     def hand_constraint(self, table, hand, play):
+        if not play in hand:
+            return False
+
         if not len(table):
             return play[-1] != 'H' or \
                 not len(list(filter(lambda x: x[-1] != 'H', hand)))
