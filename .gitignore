@@ -9,3 +9,4 @@ Debug/
 bin/
 obj/
 .vscode/
+logs/
