@@ -38,7 +38,9 @@ def create_table(table_name):
 
 def list_tables():
     """Manager Logic: LIST - List all available tables"""
-    return json.dumps(list(tables.keys()))
+    return json.dumps(list(map(lambda item: item[0], \
+                           filter(lambda item: len(item[1].players) < 4, \
+                           tables.items()))))
 
 def leave_table(usr_name, secret, table_name):
     """Game Logic: LEAVE - Used to remove players from a waiting table"""

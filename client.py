@@ -19,7 +19,6 @@ class Server:
 
         self.pubsrv = ctx.socket(zmq.SUB)
         self.pubsrv.connect('tcp://127.0.0.1:5556')
-        self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, '')
 
         self.srv = ctx.socket(zmq.REQ)
         self.srv.connect("tcp://127.0.0.1:5555")
