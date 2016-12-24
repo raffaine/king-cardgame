@@ -66,58 +66,50 @@ class DuasUltimas(BaseGame):
             self.score = -90
         return BaseGame.play_round(self, table)
 
-# English No Queens
-# Just like the base game, but each queen in table is worth -50
-
-
 class Mulheres(BaseGame):
+    """ English No Queens
+        Just like the base game, but each queen in table is worth -50 """
 
     def __init__(self):
         BaseGame.__init__(self)
         self.score = 0
 
-    # Count the number of woman cards in table (Queens),
-    # each one is worth -50 points
     def play_round(self, table):
+        """ Count the number of woman cards in table (Queens),
+            each one is worth -50 points """
         self.score = -50 * len(list(filter(lambda x: x[0] == 'Q', table)))
         return BaseGame.play_round(self, table)
 
-# English No Kings or Jacks
-# Just like the base game, but each king or jack in table is worth -30
-
-
 class Homens(BaseGame):
-
+    """ English No Kings or Jacks
+        Just like the base game, but each king or jack in table is worth -30 """
     def __init__(self):
         BaseGame.__init__(self)
         self.score = 0
 
-    # Count the number of man cards in table (Kings and Jacks),
-    # each one is worth -30 points
     def play_round(self, table):
+        """ Count the number of man cards in table (Kings and Jacks),
+            each one is worth -30 points """
         self.score = -30 * len(list(filter(lambda x: ['K', 'J'].count(x[0]), table)))
         return BaseGame.play_round(self, table)
 
-# English No Hearts
-# Just like the base game, but each card with hearts suit is worth -20
-#       Also you cannot start with Hearts unless you only have Hearts
-
-
 class Copas(BaseGame):
-
+    """ English No Hearts
+        Just like the base game, but each card with hearts suit is worth -20
+        Also you cannot start with Hearts unless you only have Hearts """
     def __init__(self):
         BaseGame.__init__(self)
         self.score = 0
 
-    # Count the number of hearts suit cards in table,
-    # each one is worth -20 points
     def play_round(self, table):
+        """ Count the number of hearts suit cards in table,
+            each one is worth -20 points """
         self.score = -20 * len(list(filter(lambda x: x[-1] == 'H', table)))
         return BaseGame.play_round(self, table)
 
-    # Player cannot play Hearts unless he only have Hearts
-    #       or table started with Hearts
     def hand_constraint(self, table, hand, play):
+        """ Player cannot play Hearts unless he only have Hearts
+            or table started with Hearts """
         if not play in hand:
             return False
 
@@ -125,33 +117,30 @@ class Copas(BaseGame):
             return not len(list(filter(lambda x: x[-1] != 'H', hand)))
         return BaseGame.hand_constraint(self, table, hand, play)
 
-# English No King of Hearts
-# Same hand constraint of No Hearts, but King of Hearts ends the hand and
-#   is worth -160 points
-
-
 class King(BaseGame):
-
+    """ English No King of Hearts
+        Same hand constraint of No Hearts, but King of Hearts ends the hand and
+        is worth -160 points """
     def __init__(self):
         BaseGame.__init__(self)
         self.score = 0
         self.kingOfHearts = False
 
-    # Check for hand end
     def is_last_round(self):
+        """ Helper to detect if it's the last round """
         return self.kingOfHearts or self.round == 13
 
-    # Check for the King of Hearts
     def play_round(self, table):
+        """ Check for the King of Hearts, whoever wins a round with it takes -160 """
         self.score = -160 * table.count('KH')
         self.kingOfHearts = (self.score == -160)
         return BaseGame.play_round(self, table)
 
-    # Player cannot play Hearts unless he only have Hearts
-    #       or table started with Hearts
-    # If Player has the King of Hearts and don't have the suit on table,
-    #       HE MUST DISCARD THE KING OF HEARTS
     def hand_constraint(self, table, hand, play):
+        """ Player cannot play Hearts unless he only have Hearts
+                or table started with Hearts
+            If Player has the King of Hearts and don't have the suit on table,
+                HE MUST DISCARD THE KING OF HEARTS """
         if not play in hand:
             return False
 
@@ -165,13 +154,11 @@ class King(BaseGame):
 
         return possible.count(play)
 
-# English Positives
-# Just like the base game, where each round score 25
-# In adition we have:
-#   - Trample Suit: Even when discarded, this suit takes the round
-
-
 class Positiva(BaseGame):
+    """ English Positives
+        Just like the base game, where each round score 25
+        In adition we have:
+         - Trample Suit: Even when discarded, this suit takes the round """
 
     def __init__(self, trample=''):
         BaseGame.__init__(self)
@@ -214,8 +201,8 @@ class KingPlayer:
     def add_game(self, game):
         self.games.append(game)
 
-    # Test if the card played is in the players hand
     def card_in_hand(self, card):
+        """ Test if the card played is in the players hand """
         return card in self.hand
 
     def __eq__(self, other):
@@ -226,8 +213,14 @@ class KingPlayer:
     def __hash__(self):
         return hash((self.name, self.secret))
 
+    def __str__(self):
+        return self.name
+
 
 class KingTable:
+    """ Class to control the game flow for a full game of King
+        The game takes 10 hands, each hand with 13 cards per player
+        and a set of rules, that I'm calling the game """
 
     def __init__(self, name):
         self.name = name
@@ -363,113 +356,113 @@ class KingTable:
 if __name__ == "__main__":
 
     print("Testing game evaluation: Vaza")
-    assert(Vaza().play_round(['2H', '5H', 'AS', '4H']) == (1, -25))
-    assert(Vaza().play_round(['10D', '5C', 'AS', '4H']) == (0, -25))
-    assert(Vaza().play_round(['3C', '3H', 'AC', '4H']) == (2, -25))
-    assert(Vaza().play_round(['5S', '6S', 'KS', 'AS']) == (3, -25))
+    assert Vaza().play_round(['2H', '5H', 'AS', '4H']) == (1, -25)
+    assert Vaza().play_round(['10D', '5C', 'AS', '4H']) == (0, -25)
+    assert Vaza().play_round(['3C', '3H', 'AC', '4H']) == (2, -25)
+    assert Vaza().play_round(['5S', '6S', 'KS', 'AS']) == (3, -25)
 
     print("Testing game evaluation: Duas Ultimas")
-    assert(DuasUltimas().play_round(['5H', 'KS', 'AC', '10H']) == (3, 0))
-    du = DuasUltimas()
-    du.round = 11
-    assert(du.play_round(['5H', 'QS', 'JS', '2H']) == (0, -90))
-    assert(du.play_round(['10C', 'QS', 'QC', '5H']) == (2, -90))
+    assert DuasUltimas().play_round(['5H', 'KS', 'AC', '10H']) == (3, 0)
+    DU = DuasUltimas()
+    DU.round = 11
+    assert DU.play_round(['5H', 'QS', 'JS', '2H']) == (0, -90)
+    assert DU.play_round(['10C', 'QS', 'QC', '5H']) == (2, -90)
 
     print("Testing game evaluation: Mulheres")
-    assert(Mulheres().play_round(['5H', 'KS', 'AC', '10H']) == (3, 0))
-    assert(Mulheres().play_round(['5H', 'QS', 'JS', '2H']) == (0, -50))
-    assert(Mulheres().play_round(['10C', 'QS', 'QC', '5H']) == (2, -100))
-    assert(Mulheres().play_round(['2H', 'QH', 'QC', 'QD']) == (1, -150))
-    assert(Mulheres().play_round(['QD', 'QS', 'QC', 'QH']) == (0, -200))
+    assert Mulheres().play_round(['5H', 'KS', 'AC', '10H']) == (3, 0)
+    assert Mulheres().play_round(['5H', 'QS', 'JS', '2H']) == (0, -50)
+    assert Mulheres().play_round(['10C', 'QS', 'QC', '5H']) == (2, -100)
+    assert Mulheres().play_round(['2H', 'QH', 'QC', 'QD']) == (1, -150)
+    assert Mulheres().play_round(['QD', 'QS', 'QC', 'QH']) == (0, -200)
 
     print("Testing game evaluation: Homens")
-    assert(Homens().play_round(['5H', 'AS', 'AC', '10H']) == (3, 0))
-    assert(Homens().play_round(['5H', 'QS', 'JS', '2H']) == (0, -30))
-    assert(Homens().play_round(['10C', 'KS', 'JC', '5H']) == (2, -60))
-    assert(Homens().play_round(['2H', 'KH', 'JH', 'KD']) == (1, -90))
-    assert(Homens().play_round(['KD', 'JS', 'KC', 'JD']) == (0, -120))
+    assert Homens().play_round(['5H', 'AS', 'AC', '10H']) == (3, 0)
+    assert Homens().play_round(['5H', 'QS', 'JS', '2H']) == (0, -30)
+    assert Homens().play_round(['10C', 'KS', 'JC', '5H']) == (2, -60)
+    assert Homens().play_round(['2H', 'KH', 'JH', 'KD']) == (1, -90)
+    assert Homens().play_round(['KD', 'JS', 'KC', 'JD']) == (0, -120)
 
     print("Testing game evaluation: Copas")
-    assert(Copas().play_round(['5H', 'AS', 'AC', '10H']) == (3, -40))
-    assert(Copas().play_round(['5D', '6H', 'AD', '10C']) == (2, -20))
-    assert(Copas().play_round(['5H', '10H', 'AD', '2H']) == (1, -60))
-    assert(Copas().play_round(['AH', '6H', 'KH', '10H']) == (0, -80))
-    assert(Copas().play_round(['5D', '6S', 'AD', '10C']) == (2, 0))
+    assert Copas().play_round(['5H', 'AS', 'AC', '10H']) == (3, -40)
+    assert Copas().play_round(['5D', '6H', 'AD', '10C']) == (2, -20)
+    assert Copas().play_round(['5H', '10H', 'AD', '2H']) == (1, -60)
+    assert Copas().play_round(['AH', '6H', 'KH', '10H']) == (0, -80)
+    assert Copas().play_round(['5D', '6S', 'AD', '10C']) == (2, 0)
 
     print("Testing game evaluation: King")
     k = King()
-    assert(King().play_round(['5H', 'AS', 'AC', '10H']) == (3, 0))
-    assert(not k.is_last_round())
+    assert King().play_round(['5H', 'AS', 'AC', '10H']) == (3, 0)
+    assert not k.is_last_round()
     k = King()
-    assert(k.play_round(['AH', '6C', 'KH', '10H']) == (0, -160))
-    assert(k.is_last_round())
+    assert k.play_round(['AH', '6C', 'KH', '10H']) == (0, -160)
+    assert k.is_last_round()
 
     print("Testing game evaluation: Positiva")
-    assert(Positiva().play_round(
-        ['5H', 'AS', 'AC', '10H']) == (3, 25))  # no trample
-    assert(Positiva('H').play_round(
-        ['5D', '6H', 'AD', '10D']) == (1, 25))  # hearts
-    assert(Positiva('C').play_round(
-        ['5H', '10H', '2C', '2D']) == (2, 25))  # clubs
-    assert(Positiva('D').play_round(
-        ['AD', '6D', 'KD', '10D']) == (0, 25))  # diamonds
-    assert(Positiva('S').play_round(
-        ['5D', '6S', 'AH', '10C']) == (1, 25))  # spades
+    assert Positiva().play_round(
+        ['5H', 'AS', 'AC', '10H']) == (3, 25)  # no trample
+    assert Positiva('H').play_round(
+        ['5D', '6H', 'AD', '10D']) == (1, 25)  # hearts
+    assert Positiva('C').play_round(
+        ['5H', '10H', '2C', '2D']) == (2, 25)  # clubs
+    assert Positiva('D').play_round(
+        ['AD', '6D', 'KD', '10D']) == (0, 25)  # diamonds
+    assert Positiva('S').play_round(
+        ['5D', '6S', 'AH', '10C']) == (1, 25)  # spades
     # trample but no trample
-    assert(Positiva('H').play_round(['5C', '2S', 'AC', '10C']) == (2, 25))
+    assert Positiva('H').play_round(['5C', '2S', 'AC', '10C']) == (2, 25)
 
     print("Testing simple hand constraint")
-    assert(BaseGame().hand_constraint([], ['2C', '3H'], '3H'))  # empty hand
+    assert BaseGame().hand_constraint([], ['2C', '3H'], '3H')  # empty hand
     # play the table naipe
-    assert(BaseGame().hand_constraint(['2C'], ['2H', '3C'], '3C'))
-    assert(not BaseGame().hand_constraint(
-        ['2C'], ['2H', '3C'], '2H'))  # invalid play
+    assert BaseGame().hand_constraint(['2C'], ['2H', '3C'], '3C')
+    assert not BaseGame().hand_constraint(
+        ['2C'], ['2H', '3C'], '2H')  # invalid play
     # more than one option
-    assert(BaseGame().hand_constraint(
-        ['2C'], ['2H', '3C', '5C', 'AS', 'AC'], '5C'))
-    assert(BaseGame().hand_constraint(
-        ['AD', 'JD', 'QH'], ['2C', '3C'], '2C'))  # discard
+    assert BaseGame().hand_constraint(
+        ['2C'], ['2H', '3C', '5C', 'AS', 'AC'], '5C')
+    assert BaseGame().hand_constraint(
+        ['AD', 'JD', 'QH'], ['2C', '3C'], '2C')  # discard
 
     print("Testing game hand constraint: Copas")
-    assert(Copas().hand_constraint([], ['2C', '3H'], '2C'))  # empty table
-    assert(not Copas().hand_constraint([], ['2C', '3H'], '3H'))  # wrong start
-    assert(Copas().hand_constraint(['2H'], ['2C', '3H'], '3H'))  # play the suit
+    assert Copas().hand_constraint([], ['2C', '3H'], '2C')  # empty table
+    assert not Copas().hand_constraint([], ['2C', '3H'], '3H')  # wrong start
+    assert Copas().hand_constraint(['2H'], ['2C', '3H'], '3H')  # play the suit
     # burn on discard
-    assert(Copas().hand_constraint(['2C'], ['2H', '3H'], '3H'))
+    assert Copas().hand_constraint(['2C'], ['2H', '3H'], '3H')
 
     print("Testing game hand constraint King")
-    assert(King().hand_constraint([], ['2C', 'KH'], '2C'))  # empty table
-    assert(not King().hand_constraint([], ['2C', 'KH'], 'KH'))  # wrong start
-    assert(King().hand_constraint(['2H'], ['3H', 'KH'], '3H'))  # play the suit
-    assert(King().hand_constraint(['2C'], ['2H', 'KH', '3D'], 'KH'))  # must discard
+    assert King().hand_constraint([], ['2C', 'KH'], '2C')  # empty table
+    assert not King().hand_constraint([], ['2C', 'KH'], 'KH')  # wrong start
+    assert King().hand_constraint(['2H'], ['3H', 'KH'], '3H')  # play the suit
+    assert King().hand_constraint(['2C'], ['2H', 'KH', '3D'], 'KH')  # must discard
 
     print("Testing playing cards in your hand")
-    assert(KingPlayer('t', None).set_hand(['2C', '4H']).card_in_hand('4H'))
-    assert(not KingPlayer('t', None).set_hand(['3C', '5D']).card_in_hand('8S'))
-    assert(KingPlayer('t', None).set_hand(['5H', '6S', '8D']).card_in_hand('6S'))
+    assert KingPlayer('t', None).set_hand(['2C', '4H']).card_in_hand('4H')
+    assert not KingPlayer('t', None).set_hand(['3C', '5D']).card_in_hand('8S')
+    assert KingPlayer('t', None).set_hand(['5H', '6S', '8D']).card_in_hand('6S')
 
     print("Checking for Hand Instances")
-    assert(isinstance(_HANDS['COPAS'](), Copas))
+    assert isinstance(_HANDS['COPAS'](), Copas)
 
     print("Checking Possible Hands")
     k = KingTable('')
     for i in range(4):
         k.join_table(KingPlayer(str(i), ''))
 
-    valid = list(_HANDS.keys())
-    assert(k.possible_hands(k.players[0]) == valid)
-    k.players[0].games.append(valid.pop(valid.index('COPAS')))
-    assert(k.possible_hands(k.players[0]) == valid)
-    k.players[0].games.append(valid.pop(valid.index('KING')))
-    assert(k.possible_hands(k.players[0]) == valid)
-    k.players[0].games.append(valid.pop(valid.index('2ULTIMAS')))
-    assert(k.possible_hands(k.players[0]) == valid)
-    k.players[0].games.append(valid.pop(valid.index('POSITIVA')))
-    assert(k.possible_hands(k.players[0]) == valid)
-    assert(k.possible_hands(k.players[0]).count('POSITIVA') == 0)
-    k.players[0].games.append(valid.pop(valid.index('HOMENS')))
-    assert(k.possible_hands(k.players[0]) == valid)
-    k.players[0].games.append(valid.pop(valid.index('MULHERES')))
-    assert(k.possible_hands(k.players[0]) == valid)
-    k.players[0].games.append(valid.pop(valid.index('VAZA')))
-    assert(k.possible_hands(k.players[0]).count('POSITIVA') == 1)
+    VALID = list(_HANDS.keys())
+    assert k.possible_hands(k.players[0]) == VALID
+    k.players[0].games.append(VALID.pop(VALID.index('COPAS')))
+    assert k.possible_hands(k.players[0]) == VALID
+    k.players[0].games.append(VALID.pop(VALID.index('KING')))
+    assert k.possible_hands(k.players[0]) == VALID
+    k.players[0].games.append(VALID.pop(VALID.index('2ULTIMAS')))
+    assert k.possible_hands(k.players[0]) == VALID
+    k.players[0].games.append(VALID.pop(VALID.index('POSITIVA')))
+    assert k.possible_hands(k.players[0]) == VALID
+    assert k.possible_hands(k.players[0]).count('POSITIVA') == 0
+    k.players[0].games.append(VALID.pop(VALID.index('HOMENS')))
+    assert k.possible_hands(k.players[0]) == VALID
+    k.players[0].games.append(VALID.pop(VALID.index('MULHERES')))
+    assert k.possible_hands(k.players[0]) == VALID
+    k.players[0].games.append(VALID.pop(VALID.index('VAZA')))
+    assert k.possible_hands(k.players[0]).count('POSITIVA') == 1
