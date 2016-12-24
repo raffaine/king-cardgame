@@ -82,10 +82,42 @@ class Server:
         self.srv.send_string("PLAY %s %s %s"%(self.usr, self.secret, card))
         return self.srv.recv_string()
 
+class GamePlayer:
+    """ Interface for Game Playing callbacks """
+    game = None
+
+    def set_game(self, game):
+        """ Game is the current game state """
+        self.game = game
+        return self
+
+    def choose_game(self, choices):
+        """ Return one of the choices given """
+        pass
+
+    def game_selected(self):
+        """ Callback after game is set on the table """
+        pass
+
+    def play_card(self):
+        """ Return one of the cards in self.game.hand (Plays that card) """
+        pass
+
+    def card_played(self):
+        """ Callback after card is played on the table """
+        pass
+
+    def end_round(self, winner):
+        """ Callback after round is ended, winner is player that wins the round """
+        pass
+
+    def end_hand(self):
+        """ Callback after hand is over """
+        pass
 
 class Game:
     """ Keeps track of game information """
-    def __init__(self, server, choice_fn, play_fn):
+    def __init__(self, server, game_player):
         self.hand = []
         self.players = []
         self.round = 0
@@ -96,8 +128,7 @@ class Game:
 
         self.handlers = {k[len('H_'):]:v for k, v in Game.__dict__.items() if k.startswith('H_')}
         self.server = server
-        self.choice_fn = choice_fn
-        self.play_fn = play_fn
+        self.player = game_player.set_game(self)
 
     def handle_msg(self, content):
         """ Invokes the handler for the message received """
@@ -119,11 +150,12 @@ class Game:
         if self.server.usr == start_player:
             msg = 'ERROR'
             while msg.startswith('ERROR'):
-                msg = self.server.choose_game(self.choice_fn(self, list(choices)))
+                msg = self.server.choose_game(self.player.choose_game(list(choices)))
 
     def H_GAME(self, game):
         """ Handles the selection of a game for the hand """
         self.game = game
+        self.player.game_selected()
 
     def H_TURN(self, player):
         """ Handles the Turn information """
@@ -131,7 +163,7 @@ class Game:
             msg = 'ERROR'
             card = ''
             while msg.startswith('ERROR'):
-                card = self.play_fn(self)
+                card = self.player.play_card()
                 msg = self.server.play_card(card)
 
             self.hand.remove(card)
@@ -139,23 +171,29 @@ class Game:
     def H_PLAY(self, card):
         """ Handles the Card playing information """
         self.table.append(card)
+        self.player.card_played()
 
     def H_ENDROUND(self, winner):
         """ Handles the end of a round """
         self.table.clear()
+        self.player.end_round(winner)
+
+    def H_ENDHAND(self):
+        """ Handles the end of a round """
+        self.player.end_hand()
 
     def H_GAMEOVER(self):
         """ Handles the end of the game """
         self.is_over = True
 
-def run(user, choice_fn, play_fn):
+def run(user, game_player, table_decision_fn=lambda s: s.hunt_table()):
     """ Helper function that establishes a table and run the game loop  """
     srv = Server(user)
-    if not srv.hunt_table():
+    if not table_decision_fn(srv):
         print("Failed to join a table, exiting client")
         return False
 
-    game = Game(srv, choice_fn, play_fn)
+    game = Game(srv, game_player)
     while not game.is_over:
         srv.poll_sub(game.handle_msg)
 

@@ -4,11 +4,12 @@ import sys
 import random
 import client
 
-def random_choice(game, choices):
-    return random.choice(choices)
+class RandomPlayer(client.GamePlayer):
+    def choose_game(self, choices):
+        return random.choice(choices)
 
-def random_card(game):
-    return random.choice(game.hand)
+    def play_card(self):
+        return random.choice(self.game.hand)
 
 if __name__ == "__main__":
     usr = ''
@@ -17,4 +18,4 @@ if __name__ == "__main__":
         usr = sys.argv[1]
 
     random.seed()
-    client.run(usr, random_choice, random_card)
+    client.run(usr, RandomPlayer())

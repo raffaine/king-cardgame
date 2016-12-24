@@ -151,8 +151,11 @@ def play_card(usr_name, secret, card):
     # Check for end of round
     rnd_winner = table.end_round()
     if rnd_winner:
+        status_publisher.send_string('%s ENDROUND %s'%(table.name, rnd_winner.name))
         # Check for end of hand
         if table.end_hand():
+            #TODO Inform scores on Hand Over (Partial Hand Score) and Game Over (Full Game Score)
+            status_publisher.send_string('%s ENDHAND'%(table.name))
             # Check for a game over
             if table.end_game():
                 status_publisher.send_string('%s GAMEOVER'%(table.name))
@@ -162,8 +165,6 @@ def play_card(usr_name, secret, card):
                 start_hand(table)
 
             return 'ACK'
-
-        status_publisher.send_string('%s ENDROUND %s'%(table.name, rnd_winner.name))
 
     # If we got here, game is on and so we inform the turn
     inform_turn(table)
