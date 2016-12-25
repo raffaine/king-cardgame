@@ -121,7 +121,7 @@ class Game:
         self.hand = []
         self.players = []
         self.round = 0
-        self.turn = 0
+        self.turn = ''
         self.table = []
         self.is_over = False
         self.game = ''
@@ -143,7 +143,7 @@ class Game:
 
     def H_STARTHAND(self, start_player, *choices):
         """ Handles the start of a new hand """
-        self.turn = self.players.index(start_player)
+        self.turn = start_player
         self.hand = json.loads(self.server.get_hand())
 
         # Use choice function if its user's turn
@@ -159,6 +159,7 @@ class Game:
 
     def H_TURN(self, player):
         """ Handles the Turn information """
+        self.turn = player
         if self.server.usr == player:
             msg = 'ERROR'
             card = ''
@@ -205,7 +206,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         usr = sys.argv[1]
 
-    def nop(*args):
-        pass
-
-    run(usr, nop, nop)
+    run(usr, GamePlayer())
