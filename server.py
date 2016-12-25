@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import atexit
 import json
 import zmq
 from king import *
@@ -171,6 +172,9 @@ def play_card(usr_name, secret, card):
 
     return 'ACK'
 
+def cleanup(_tables):
+    for tbl in _tables:
+        status_publisher.send_string('%s GAMEOVER'%(tbl))
 
 ### ZMQ Initialization ###
 ctx = zmq.Context()
@@ -197,15 +201,12 @@ handlers = {
     'PLAY': play_card
 }
 
-# Main Game Loop
+atexit.register(cleanup, tables)
+
 try:
+    # Main Game Loop
     while True:
         # Wait a few for some message and do it all again
-        while pool_req(handlers, 100):
-            pass
-
+        pool_req(handlers, 100)
 except KeyboardInterrupt:
-    for tbl in tables:
-        status_publisher.send_string('%s GAMEOVER'%(tbl))
-
-
+    pass
