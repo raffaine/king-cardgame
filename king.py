@@ -2,7 +2,7 @@
 from random import shuffle
 from functools import reduce
 
-RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
 
 class BaseGame:
     """ This class has the basic rule of the game (Trick tacking),
@@ -90,7 +90,7 @@ class Homens(BaseGame):
     def play_round(self, table):
         """ Count the number of man cards in table (Kings and Jacks),
             each one is worth -30 points """
-        self.score = -30 * len(list(filter(lambda x: ['K', 'J'].count(x[0]), table)))
+        self.score = -30 * len(list(filter(lambda x: x[0] in ['K', 'J'], table)))
         return BaseGame.play_round(self, table)
 
 class Copas(BaseGame):
@@ -195,7 +195,7 @@ class KingPlayer:
         self.games = []
 
     def set_hand(self, hand):
-        self.hand = hand
+        self.hand = sorted(hand, key=lambda c: (c[1], RANKS.index(c[0])))
         return self
 
     def add_game(self, game):
@@ -357,59 +357,59 @@ if __name__ == "__main__":
 
     print("Testing game evaluation: Vaza")
     assert Vaza().play_round(['2H', '5H', 'AS', '4H']) == (1, -25)
-    assert Vaza().play_round(['10D', '5C', 'AS', '4H']) == (0, -25)
+    assert Vaza().play_round(['TD', '5C', 'AS', '4H']) == (0, -25)
     assert Vaza().play_round(['3C', '3H', 'AC', '4H']) == (2, -25)
     assert Vaza().play_round(['5S', '6S', 'KS', 'AS']) == (3, -25)
 
     print("Testing game evaluation: Duas Ultimas")
-    assert DuasUltimas().play_round(['5H', 'KS', 'AC', '10H']) == (3, 0)
+    assert DuasUltimas().play_round(['5H', 'KS', 'AC', 'TH']) == (3, 0)
     DU = DuasUltimas()
     DU.round = 11
     assert DU.play_round(['5H', 'QS', 'JS', '2H']) == (0, -90)
-    assert DU.play_round(['10C', 'QS', 'QC', '5H']) == (2, -90)
+    assert DU.play_round(['TC', 'QS', 'QC', '5H']) == (2, -90)
 
     print("Testing game evaluation: Mulheres")
-    assert Mulheres().play_round(['5H', 'KS', 'AC', '10H']) == (3, 0)
+    assert Mulheres().play_round(['5H', 'KS', 'AC', 'TH']) == (3, 0)
     assert Mulheres().play_round(['5H', 'QS', 'JS', '2H']) == (0, -50)
-    assert Mulheres().play_round(['10C', 'QS', 'QC', '5H']) == (2, -100)
+    assert Mulheres().play_round(['TC', 'QS', 'QC', '5H']) == (2, -100)
     assert Mulheres().play_round(['2H', 'QH', 'QC', 'QD']) == (1, -150)
     assert Mulheres().play_round(['QD', 'QS', 'QC', 'QH']) == (0, -200)
 
     print("Testing game evaluation: Homens")
-    assert Homens().play_round(['5H', 'AS', 'AC', '10H']) == (3, 0)
+    assert Homens().play_round(['5H', 'AS', 'AC', 'TH']) == (3, 0)
     assert Homens().play_round(['5H', 'QS', 'JS', '2H']) == (0, -30)
-    assert Homens().play_round(['10C', 'KS', 'JC', '5H']) == (2, -60)
+    assert Homens().play_round(['TC', 'KS', 'JC', '5H']) == (2, -60)
     assert Homens().play_round(['2H', 'KH', 'JH', 'KD']) == (1, -90)
     assert Homens().play_round(['KD', 'JS', 'KC', 'JD']) == (0, -120)
 
     print("Testing game evaluation: Copas")
-    assert Copas().play_round(['5H', 'AS', 'AC', '10H']) == (3, -40)
-    assert Copas().play_round(['5D', '6H', 'AD', '10C']) == (2, -20)
-    assert Copas().play_round(['5H', '10H', 'AD', '2H']) == (1, -60)
-    assert Copas().play_round(['AH', '6H', 'KH', '10H']) == (0, -80)
-    assert Copas().play_round(['5D', '6S', 'AD', '10C']) == (2, 0)
+    assert Copas().play_round(['5H', 'AS', 'AC', 'TH']) == (3, -40)
+    assert Copas().play_round(['5D', '6H', 'AD', 'TC']) == (2, -20)
+    assert Copas().play_round(['5H', 'TH', 'AD', '2H']) == (1, -60)
+    assert Copas().play_round(['AH', '6H', 'KH', 'TH']) == (0, -80)
+    assert Copas().play_round(['5D', '6S', 'AD', 'TC']) == (2, 0)
 
     print("Testing game evaluation: King")
     k = King()
-    assert King().play_round(['5H', 'AS', 'AC', '10H']) == (3, 0)
+    assert King().play_round(['5H', 'AS', 'AC', 'TH']) == (3, 0)
     assert not k.is_last_round()
     k = King()
-    assert k.play_round(['AH', '6C', 'KH', '10H']) == (0, -160)
+    assert k.play_round(['AH', '6C', 'KH', 'TH']) == (0, -160)
     assert k.is_last_round()
 
     print("Testing game evaluation: Positiva")
     assert Positiva().play_round(
-        ['5H', 'AS', 'AC', '10H']) == (3, 25)  # no trample
+        ['5H', 'AS', 'AC', 'TH']) == (3, 25)  # no trample
     assert Positiva('H').play_round(
-        ['5D', '6H', 'AD', '10D']) == (1, 25)  # hearts
+        ['5D', '6H', 'AD', 'TD']) == (1, 25)  # hearts
     assert Positiva('C').play_round(
-        ['5H', '10H', '2C', '2D']) == (2, 25)  # clubs
+        ['5H', 'TH', '2C', '2D']) == (2, 25)  # clubs
     assert Positiva('D').play_round(
-        ['AD', '6D', 'KD', '10D']) == (0, 25)  # diamonds
+        ['AD', '6D', 'KD', 'TD']) == (0, 25)  # diamonds
     assert Positiva('S').play_round(
-        ['5D', '6S', 'AH', '10C']) == (1, 25)  # spades
+        ['5D', '6S', 'AH', 'TC']) == (1, 25)  # spades
     # trample but no trample
-    assert Positiva('H').play_round(['5C', '2S', 'AC', '10C']) == (2, 25)
+    assert Positiva('H').play_round(['5C', '2S', 'AC', 'TC']) == (2, 25)
 
     print("Testing simple hand constraint")
     assert BaseGame().hand_constraint([], ['2C', '3H'], '3H')  # empty hand
