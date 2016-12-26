@@ -10,23 +10,30 @@ SPAWN_RATE = 600 #PER MINUTE
 SERVER = "server.py"
 CLIENT = "random_bot.py"
 PYTHON_EXEC = sys.executable if sys.platform != 'win32' else "python.exe"
+SERVER_PROC = None
+CLIENTS = []
 
 def cleanup():
     """ Handler for test termination """
-    SERVER_PROC.terminate()
-    time.sleep(3)
+    if SERVER_PROC:
+        SERVER_PROC.terminate()
+
+    time.sleep(1)
     for proc in CLIENTS:
         proc.terminate()
 
 if __name__ == "__main__":
+    NO_SERVER_OPT = False
+
     if len(sys.argv) > 1:
         NUM_CLIENTS = int(sys.argv[1])
+        if len(sys.argv) > 2:
+            NO_SERVER_OPT = sys.argv[2] == "--noserver"
 
-    print("Starting Server")
-    LOG_SERVER = open("./logs/log_server.log", "w")
-    SERVER_PROC = subprocess.Popen([PYTHON_EXEC, SERVER], stdout=LOG_SERVER)
-
-    CLIENTS = []
+    if not NO_SERVER_OPT:
+        print("Starting Server")
+        LOG_SERVER = open("./logs/log_server.log", "w")
+        SERVER_PROC = subprocess.Popen([PYTHON_EXEC, SERVER], stdout=LOG_SERVER)
 
     atexit.register(cleanup)
     try:
