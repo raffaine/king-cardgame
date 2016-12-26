@@ -306,6 +306,8 @@ class KingTable:
         self.bid_turn = (self.turn + 1) % 4
         self.bids = [0] * 4
 
+        return True
+
     def bid(self, player, ammount):
         """ Handles the player's bids """
         if self.state is not GameState.BIDDING or \
@@ -330,12 +332,15 @@ class KingTable:
 
         if self.bid_turn == self.turn:
             # Check to see if it's time to decide
-            if self.bids.count(0) >= 3:
+            if self.bids.count(-1) >= 2:
                 # The auctioner always bids 0, if 2 more players forefeit is time to decide
-                self.state = GameState.DECIDE_BID
+                # If all bidders forefeit, there is no choice to make, skip to trample choosing
+                self.state = GameState.DECIDE_BID if self.bids.count(-1) < 3 \
+                        else GameState.CHOOSE_TRAMPLE
             else:
-                # In case there is at least two bidders, go back to lowest non-zero offer
-                self.bid_turn = min(filter(lambda x: x[1] > 0, enumerate(self.bids)), key=itemgetter(1))[0]
+                # In case there is at least two bidders, go back to lowest offer
+                self.bid_turn = min(filter(lambda x: x[1] >= 0, \
+                                    enumerate(self.bids)), key=itemgetter(1))[0]
 
         return True
 
@@ -366,7 +371,7 @@ class KingTable:
             return False
 
         self.state = GameState.CHOOSE_HAND
-        res = self.start_hand(self.players[self.turn], str(Positiva(), *trample))
+        res = self.start_hand(self.players[self.turn], str(Positiva()), *trample)
         if not res:
             self.state = GameState.CHOOSE_TRAMPLE
 
@@ -386,7 +391,7 @@ class KingTable:
 
         # Positives could come with Trample Suit
         # Start the game
-        self.game = _HANDS[game]() if trampling else \
+        self.game = _HANDS[game]() if not trampling else \
                     _HANDS[game](trampling[0])
 
         self.score.append(4 * [0])
@@ -426,6 +431,8 @@ class KingTable:
 
         if self.game.is_last_round():
             self.state = GameState.HAND_OVER
+        else:
+            self.state = GameState.RUNNING
 
         return self.players[self.turn]
 

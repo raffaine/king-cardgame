@@ -12,7 +12,16 @@ class RandomPlayer(client.GamePlayer):
         return random.choice(self.game.hand)
 
     def bid(self):
-        return 0 # Always forfeit bidding
+        # Always forfeit bidding
+        return 0
+
+    def decide(self):
+        # Randomly accepts or refuses it
+        return random.choice([True, False])
+
+    def choose_trample(self):
+        # Chooses some random suit if player won the bidding
+        return random.choice(list("SCHD"))
 
 if __name__ == "__main__":
     usr = ''

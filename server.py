@@ -148,14 +148,21 @@ def get_bid(usr_name, secret, value):
     if not table:
         return 'ERROR Invalid Player'
 
-    if not table.bid(player, value):
+    try:
+        if not table.bid(player, int(value)):
+            raise ValueError
+    except ValueError:
         return 'ERROR Invalid Action'
 
     status_publisher.send_string('%s BIDS %s'%(table.name, value))
 
     # Check for decision time
-    if table.decide:
+    if table.state is GameState.DECIDE_BID:
         status_publisher.send_string('%s DECIDE %s'%(table.name, table.players[table.turn].name))
+    elif table.state is GameState.CHOOSE_TRAMPLE:
+        status_publisher.send_string('%s CHOOSETRAMPLE %s'%(table.name, table.players[table.turn].name))
+    else:
+        status_publisher.send_string('%s BID %s'%(table.name, table.players[table.bid_turn].name))
 
     return 'ACK'
 
@@ -167,7 +174,7 @@ def get_decision(usr_name, secret, decision):
     if not table:
         return 'ERROR Invalid Player'
 
-    bid_winner = table.decide(player, decision)
+    bid_winner = table.decide(player, decision == 'True')
     if not bid_winner:
         return 'ERROR Invalid Action'
 
@@ -186,8 +193,10 @@ def get_trample(usr_name, secret, *trample):
         return 'ERROR Invalid action'
 
     # Inform players the chosen game
-    game = ' '.join([str(Positiva())]+list(trample))
-    status_publisher.send_string('%s GAME %s'%(table.name, game))
+    game_str = '%s GAME %s'%(table.name, str(Positiva()))
+    if trample:
+        game_str += ' %s'%(trample[0])
+    status_publisher.send_string(game_str)
 
     # Inform the Turn
     inform_turn(table)
@@ -259,8 +268,8 @@ handlers = {
     'GETTURN': get_turn,
     'GAME': choose_game,
     'BID': get_bid,
-    'DECIDE' get_decision,
-    'TRAMPLE' get_trample,
+    'DECIDE': get_decision,
+    'TRAMPLE': get_trample,
     'PLAY': play_card
 }
 

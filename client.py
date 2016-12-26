@@ -22,7 +22,7 @@ class Server:
 
         self.srv = ctx.socket(zmq.REQ)
         self.srv.connect("tcp://127.0.0.1:5555")
-        
+
     def resubscribe(self, table):
         self.pubsrv.setsockopt_string(zmq.UNSUBSCRIBE, '')
         self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, table)
@@ -79,7 +79,7 @@ class Server:
         return self.srv.recv_string()
 
     def bid(self, value):
-        self.srv.send_string("BID %s %s %s"%(self.usr, self.secret, value))
+        self.srv.send_string("BID %s %s %d"%(self.usr, self.secret, value))
         return self.srv.recv_string()
 
     def decide(self, value):
@@ -156,6 +156,7 @@ class Game:
         self.bidder = ''
         self.max_bid = 0
         self.max_bidder = ''
+        self.trample = ''
 
         self.handlers = {k[len('H_'):]:v for k, v in Game.__dict__.items() if k.startswith('H_')}
         self.server = server
@@ -188,10 +189,17 @@ class Game:
 
     def H_DECIDE(self, player):
         """ Handles the auctioner decision """
-        if self.player == self.server.usr:
+        if player == self.server.usr:
             msg = 'ERROR'
             while msg.startswith('ERROR'):
                 msg = self.server.decide(self.player.decide())
+
+    def H_CHOOSETRAMPLE(self, player):
+        """ Handles the trample suit choice """
+        if player == self.server.usr:
+            msg = 'ERROR'
+            while msg.startswith('ERROR'):
+                msg = self.server.choose_trample(self.player.choose_trample())
 
     def H_STARTHAND(self, start_player, *choices):
         """ Handles the start of a new hand """
@@ -205,9 +213,10 @@ class Game:
             while msg.startswith('ERROR'):
                 msg = self.server.choose_game(self.player.choose_game(list(choices)))
 
-    def H_GAME(self, game):
+    def H_GAME(self, game, *trample):
         """ Handles the selection of a game for the hand """
         self.game = game
+        self.trample = '' if not trample else trample[0]
         self.player.game_selected()
 
     def H_TURN(self, player):
