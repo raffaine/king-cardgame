@@ -82,6 +82,14 @@ class Server:
         self.srv.send_string("BID %s %s %s"%(self.usr, self.secret, value))
         return self.srv.recv_string()
 
+    def decide(self, value):
+        self.srv.send_string("DECIDE %s %s %s"%(self.usr, self.secret, value))
+        return self.srv.recv_string()
+
+    def choose_trample(self, value):
+        self.srv.send_string("TRAMPLE %s %s %s"%(self.usr, self.secret, value))
+        return self.srv.recv_string()
+
     def play_card(self, card):
         self.srv.send_string("PLAY %s %s %s"%(self.usr, self.secret, card))
         return self.srv.recv_string()
@@ -101,6 +109,18 @@ class GamePlayer:
 
     def bid(self):
         """ Callback to collect ammount player wants to bid """
+        pass
+
+    def inform_bid(self):
+        """ Callback to inform last bid in the auction """
+        pass
+
+    def decide(self):
+        """ Callback to get decision if player is the auctioner """
+        pass
+
+    def choose_trample(self):
+        """ Callback to get trample suit if player won the bid (or is the auctioner and declined)"""
         pass
 
     def game_selected(self):
@@ -134,7 +154,8 @@ class Game:
         self.is_over = False
         self.game = ''
         self.bidder = ''
-        self.cur_max_bid = 0
+        self.max_bid = 0
+        self.max_bidder = ''
 
         self.handlers = {k[len('H_'):]:v for k, v in Game.__dict__.items() if k.startswith('H_')}
         self.server = server
@@ -158,13 +179,25 @@ class Game:
             msg = 'ERROR'
             while msg.startswith('ERROR'):
                 msg = self.server.bid(self.player.bid())
-            
+
+    def H_BIDS(self, value):
+        """ Handles the bidding value info """
+        self.max_bid = int(value) # I can assume that server only inform valid bids
+        self.max_bidder = self.bidder
+        self.player.inform_bid()
+
+    def H_DECIDE(self, player):
+        """ Handles the auctioner decision """
+        if self.player == self.server.usr:
+            msg = 'ERROR'
+            while msg.startswith('ERROR'):
+                msg = self.server.decide(self.player.decide())
 
     def H_STARTHAND(self, start_player, *choices):
         """ Handles the start of a new hand """
         self.turn = start_player
         self.hand = json.loads(self.server.get_hand())
-        self.cur_max_bid = 0
+        self.max_bid = 0
 
         # Use choice function if its user's turn
         if self.server.usr == start_player:

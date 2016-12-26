@@ -173,6 +173,26 @@ def get_decision(usr_name, secret, decision):
 
     status_publisher.send_string('%s CHOOSETRAMPLE %s'%(table.name, bid_winner))
 
+    return 'ACK'
+
+def get_trample(usr_name, secret, *trample):
+    player = KingPlayer(usr_name, secret)
+    table = players.get(player, None)
+
+    if not table:
+        return 'ERROR Invalid Player'
+
+    if not table.choose_trample(player, trample[0] if trample else ''):
+        return 'ERROR Invalid action'
+
+    # Inform players the chosen game
+    game = ' '.join([str(Positiva())]+list(trample))
+    status_publisher.send_string('%s GAME %s'%(table.name, game))
+
+    # Inform the Turn
+    inform_turn(table)
+
+    return 'ACK'
 
 
 def play_card(usr_name, secret, card):
@@ -238,6 +258,9 @@ handlers = {
     'GETHAND': get_hand,
     'GETTURN': get_turn,
     'GAME': choose_game,
+    'BID': get_bid,
+    'DECIDE' get_decision,
+    'TRAMPLE' get_trample,
     'PLAY': play_card
 }
 

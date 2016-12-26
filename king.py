@@ -2,6 +2,7 @@
 from random import shuffle
 from functools import reduce
 from enum import Enum
+from operator import itemgetter
 
 RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
 
@@ -313,19 +314,63 @@ class KingTable:
            self.players[self.turn] == player:
             return False
 
-        if not (self.bids[self.bid_turn] < ammount < 13):
+        if ammount != 0 and \
+           not max(self.bids) < ammount < 13:
             return False
 
-        #TODO finish this
+        # An ammount of 0 means forefeit, we store as -1 to
+        # differentiate from those that haven't bid
+        self.bids[self.bid_turn] = ammount if ammount > 0 else -1
+
+        # Finds the next bidder
+        while self.bid_turn != self.turn:
+            self.bid_turn = (self.bid_turn + 1) % 4
+            if self.bids[self.bid_turn] >= 0:
+                break
+
+        if self.bid_turn == self.turn:
+            # Check to see if it's time to decide
+            if self.bids.count(0) >= 3:
+                # The auctioner always bids 0, if 2 more players forefeit is time to decide
+                self.state = GameState.DECIDE_BID
+            else:
+                # In case there is at least two bidders, go back to lowest non-zero offer
+                self.bid_turn = min(filter(lambda x: x[1] > 0, enumerate(self.bids)), key=itemgetter(1))[0]
+
+        return True
 
     def decide(self, player, decision):
-        """ Handles the decision to accept or not the bid """
+        """ Handles the decision to accept or not the bid, returns the winner bid """
         if self.state is not GameState.DECIDE_BID or \
            player not in self.players or \
            self.players[self.turn] != player:
+            return ''
+
+        # decision is a boolean representing acceptance of the winning bid
+        if not decision:
+            # Forefeit all bids if auctioner has not accepted except the auctioner
+            self.bids = 4 * [-1]
+            self.bids[self.turn] = 0
+
+        self.state = GameState.CHOOSE_TRAMPLE
+
+        # Return name of bid winner (it can be the auctioner if he declines)
+        self.bid_turn = max(enumerate(self.bids), key=itemgetter(1))[0]
+        return self.players[self.bid_turn].name
+
+    def choose_trample(self, player, *trample):
+        """ Handles the choice of a trample suit """
+        if self.state is not GameState.CHOOSE_TRAMPLE or \
+           player not in self.players or \
+           player != self.players[self.bid_turn]:
             return False
 
-        #TODO finishi this
+        self.state = GameState.CHOOSE_HAND
+        res = self.start_hand(self.players[self.turn], str(Positiva(), *trample))
+        if not res:
+            self.state = GameState.CHOOSE_TRAMPLE
+
+        return res
 
     def start_hand(self, player, game, *trampling):
         """ Starts a new hand, with player being the starter and
@@ -336,7 +381,7 @@ class KingTable:
            player not in self.players or \
            self.players[self.turn] != player or \
            game not in self.possible_hands(player) or \
-           (trampling and trampling[0] in ['S', 'H', 'C', 'D']):
+           (trampling and trampling[0] not in ['S', 'H', 'C', 'D']):
             return False
 
         # Positives could come with Trample Suit
