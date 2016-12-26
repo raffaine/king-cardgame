@@ -78,6 +78,10 @@ class Server:
         self.srv.send_string("GAME %s %s %s"%(self.usr, self.secret, game))
         return self.srv.recv_string()
 
+    def bid(self, value):
+        self.srv.send_string("BID %s %s %s"%(self.usr, self.secret, value))
+        return self.srv.recv_string()
+
     def play_card(self, card):
         self.srv.send_string("PLAY %s %s %s"%(self.usr, self.secret, card))
         return self.srv.recv_string()
@@ -93,6 +97,10 @@ class GamePlayer:
 
     def choose_game(self, choices):
         """ Return one of the choices given """
+        pass
+
+    def bid(self):
+        """ Callback to collect ammount player wants to bid """
         pass
 
     def game_selected(self):
@@ -125,6 +133,8 @@ class Game:
         self.table = []
         self.is_over = False
         self.game = ''
+        self.bidder = ''
+        self.cur_max_bid = 0
 
         self.handlers = {k[len('H_'):]:v for k, v in Game.__dict__.items() if k.startswith('H_')}
         self.server = server
@@ -141,10 +151,20 @@ class Game:
         """ Handles the start of a new game """
         self.players = list(players)
 
+    def H_BID(self, bidder):
+        """ Handles the bid turn """
+        self.bidder = bidder
+        if self.bidder == self.server.usr:
+            msg = 'ERROR'
+            while msg.startswith('ERROR'):
+                msg = self.server.bid(self.player.bid())
+            
+
     def H_STARTHAND(self, start_player, *choices):
         """ Handles the start of a new hand """
         self.turn = start_player
         self.hand = json.loads(self.server.get_hand())
+        self.cur_max_bid = 0
 
         # Use choice function if its user's turn
         if self.server.usr == start_player:

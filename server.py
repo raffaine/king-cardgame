@@ -113,6 +113,9 @@ def get_turn(usr_name, secret):
 
     return table.players[table.turn].name
 
+def inform_turn(table):
+    status_publisher.send_string('%s TURN %s'%(table.name, table.players[table.turn].name))
+
 def choose_game(usr_name, secret, game):
     """Game Logic: ChooseGame - Used to choose the game for the current hand"""
     player = KingPlayer(usr_name, secret)
@@ -120,6 +123,11 @@ def choose_game(usr_name, secret, game):
 
     if not table:
         return 'ERROR Invalid Player'
+
+    # Positivas start a biding process
+    if game == str(Positiva()) and table.start_positiva(player):
+        status_publisher.send_string('%s BID %s'%(table.name, table.players[table.bid_turn].name))
+        return 'ACK'
 
     if not table.start_hand(table.get_player(player), game):
         return 'ERROR Invalid action'
@@ -132,8 +140,40 @@ def choose_game(usr_name, secret, game):
 
     return 'ACK'
 
-def inform_turn(table):
-    status_publisher.send_string('%s TURN %s'%(table.name, table.players[table.turn].name))
+def get_bid(usr_name, secret, value):
+    """ Game Logic: Bid - Handles player bid """
+    player = KingPlayer(usr_name, secret)
+    table = players.get(player, None)
+
+    if not table:
+        return 'ERROR Invalid Player'
+
+    if not table.bid(player, value):
+        return 'ERROR Invalid Action'
+
+    status_publisher.send_string('%s BIDS %s'%(table.name, value))
+
+    # Check for decision time
+    if table.decide:
+        status_publisher.send_string('%s DECIDE %s'%(table.name, table.players[table.turn].name))
+
+    return 'ACK'
+
+def get_decision(usr_name, secret, decision):
+    """ Game Logic: Bid - Handles decision to take or not the winning bid """
+    player = KingPlayer(usr_name, secret)
+    table = players.get(player, None)
+
+    if not table:
+        return 'ERROR Invalid Player'
+
+    bid_winner = table.decide(player, decision)
+    if not bid_winner:
+        return 'ERROR Invalid Action'
+
+    status_publisher.send_string('%s CHOOSETRAMPLE %s'%(table.name, bid_winner))
+
+
 
 def play_card(usr_name, secret, card):
     """Game Logic: PlayCard - Handles logic for card playing and turn management"""

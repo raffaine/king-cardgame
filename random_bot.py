@@ -11,6 +11,9 @@ class RandomPlayer(client.GamePlayer):
     def play_card(self):
         return random.choice(self.game.hand)
 
+    def bid(self):
+        return 0 # Always forfeit bidding
+
 if __name__ == "__main__":
     usr = ''
 

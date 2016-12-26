@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from random import shuffle
 from functools import reduce
+from enum import Enum
 
 RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
 
@@ -171,6 +172,9 @@ class Positiva(BaseGame):
         index = table.index(elem[0]) if elem else 0
         return BaseGame.play_round(self, table, index)
 
+    def __str__(self):
+        return 'POSITIVA'
+
 
 _HANDS = \
     {
@@ -216,6 +220,16 @@ class KingPlayer:
     def __str__(self):
         return self.name
 
+class GameState(Enum):
+    NOT_STARTED = 1
+    CHOOSE_HAND = 2
+    BIDDING = 3
+    DECIDE_BID = 4
+    CHOOSE_TRAMPLE = 5
+    RUNNING = 6
+    ROUND_OVER = 7
+    HAND_OVER = 8
+    GAME_OVER = 9
 
 class KingTable:
     """ Class to control the game flow for a full game of King
@@ -226,14 +240,12 @@ class KingTable:
         self.name = name
         self.players = []
         self.score = []
-        self.game_count = 0
         self.game = None
-        self.deck = [x + y for x in RANKS for y in ['S', 'C', 'H', 'D']]
-
-        self.running = False
-        self.partial_score = 4 * [0]
+        self.state = GameState.NOT_STARTED
         self.table = []
         self.turn = 0
+        self.bids = []
+        self.bid_turn = 0
 
     def get_player(self, player):
         for p in self.players:
@@ -268,88 +280,124 @@ class KingTable:
         return False
 
     def setup_hand(self):
-        shuffle(self.deck)
+        """ Sets up a new hand but doesn't start it as a game must be chosen """
+        deck = [x + y for x in RANKS for y in ['S', 'C', 'H', 'D']]
+        shuffle(deck)
 
         start, stop = 0, 13
         for player in self.players:
-            player.set_hand(self.deck[start:stop])
+            player.set_hand(deck[start:stop])
             start, stop = stop, stop + 13
 
-        self.turn = self.game_count % 4
+        self.state = GameState.CHOOSE_HAND
+        self.turn = len(self.score) % 4
         return self.players[self.turn]
 
-    def start_hand(self, player, game):
+    def start_positiva(self, player):
+        """ If allowed, starts the Biding process before a game is chosen """
+        if self.state is not GameState.CHOOSE_HAND or \
+           player not in self.players or \
+           self.players[self.turn] != player or \
+           str(Positiva()) not in self.possible_hands(player):
+            return False
+
+        self.state = GameState.BIDDING
+        self.bid_turn = (self.turn + 1) % 4
+        self.bids = [0] * 4
+
+    def bid(self, player, ammount):
+        """ Handles the player's bids """
+        if self.state is not GameState.BIDDING or \
+           player not in self.players or \
+           self.players[self.bid_turn] != player or \
+           self.players[self.turn] == player:
+            return False
+
+        if not (self.bids[self.bid_turn] < ammount < 13):
+            return False
+
+        #TODO finish this
+
+    def decide(self, player, decision):
+        """ Handles the decision to accept or not the bid """
+        if self.state is not GameState.DECIDE_BID or \
+           player not in self.players or \
+           self.players[self.turn] != player:
+            return False
+
+        #TODO finishi this
+
+    def start_hand(self, player, game, *trampling):
         """ Starts a new hand, with player being the starter and
-        game either a string in the form 'GAME_NAME TRAMPLING_SUIT', e.g 'COPAS' or 'POSITIVA S'"""
+        game a valid option in HANDS, if game is POSITIVA then
+        trampling will indicate a trampling suit"""
 
-        # check if its time to choose the game
-        if self.running:
-            return False
-
-        # Check player exists and if it is his turn
-        if not self.players.count(player) or \
-           self.players.index(player) != self.turn:
-            return False
-
-        game = game.split() or [game]
-        # Check if game is possible
-        if not game[0] in _HANDS or \
-           not self.possible_hands(player).count(game[0]):
+        if self.state is not GameState.CHOOSE_HAND or \
+           player not in self.players or \
+           self.players[self.turn] != player or \
+           game not in self.possible_hands(player) or \
+           (trampling and trampling[0] in ['S', 'H', 'C', 'D']):
             return False
 
         # Positives could come with Trample Suit
         # Start the game
-        self.game = _HANDS[game[0]]() if len(game) == 1 else \
-            _HANDS[game[0]](game[1])
+        self.game = _HANDS[game]() if trampling else \
+                    _HANDS[game](trampling[0])
 
-        self.partial_score = 4 * [0]
-        self.running = True
+        self.score.append(4 * [0])
+        self.state = GameState.RUNNING
 
-        player.add_game(game[0])
+        player.add_game(game)
 
         return True
 
     def play_card(self, player, card):
-        if not self.running or self.game.is_last_round():
-            return False
-
-        # Check player exists and if it is his turn
-        if not self.players.count(player) or self.players.index(player) != self.turn:
-            return False
-
-        if not self.game.hand_constraint(self.table, player.hand, card):
+        """ Handles card playing """
+        if self.state is not GameState.RUNNING or \
+           player not in self.players or \
+           self.players[self.turn] != player or \
+           not self.game.hand_constraint(self.table, player.hand, card):
             return False
 
         self.table.append(card)
         player.hand.remove(card)
         self.turn = (self.turn + 1) % 4
+
+        if len(self.table) == 4:
+            self.state = GameState.ROUND_OVER
+
         return True
 
     def end_round(self):
-        if not self.running or len(self.table) < 4:
+        """ Handles end of the round """
+        if self.state is not GameState.ROUND_OVER:
             return None
 
         (winner, pts) = self.game.play_round(self.table)
 
-        self.turn = (self.turn + winner) % 4
+        self.turn = winner
         self.table = []
-        self.partial_score[self.turn] += pts
+        self.score[-1][self.turn] += pts
+
+        if self.game.is_last_round():
+            self.state = GameState.HAND_OVER
 
         return self.players[self.turn]
 
     def end_hand(self):
-        if self.running and self.game.is_last_round():
-            self.game_count += 1
-            self.score.append(self.partial_score)
-            self.running = False
-            return True
+        """ Handles end of the hand """
+        if self.state is not GameState.HAND_OVER:
+            return False
 
-        return False
+        self.state = GameState.CHOOSE_HAND if len(self.score) < 10 else GameState.GAME_OVER
+        return True
 
     def end_game(self):
-        return not self.running and self.game_count == 10
+        """ Checks for end of game """
+        return self.state is GameState.GAME_OVER
 
     def get_score(self):
+        """ Return Game Score """
         return reduce(lambda a, b: map(lambda x, y: x + y, a, b), self.score, 4 * [0])
 
 
@@ -466,3 +514,9 @@ if __name__ == "__main__":
     assert k.possible_hands(k.players[0]) == VALID
     k.players[0].games.append(VALID.pop(VALID.index('VAZA')))
     assert k.possible_hands(k.players[0]).count('POSITIVA') == 1
+
+    print("Checking Positiva Biding")
+    k = KingTable('')
+    for i in range(4):
+        k.join_table(KingPlayer(str(i), ''))
+

@@ -30,6 +30,17 @@ class HumanPlayer(client.GamePlayer):
 
         return choice
 
+    def bid(self):
+        print("You have a chance to bid, inform value:")
+        bid = -1
+        while bid < 0:
+            try:
+                bid = int(input('>'))
+            except ValueError:
+                pass
+
+        return bid
+
     def game_selected(self):
         clear_screen()
         print("A new hand started. The game will be", self.game.game)
