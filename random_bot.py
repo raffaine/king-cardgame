@@ -12,8 +12,9 @@ class RandomPlayer(client.GamePlayer):
         return random.choice(self.game.hand)
 
     def bid(self):
-        # Always forfeit bidding
-        return 0
+        # Select a random option with higher chance of forefeit (50%)
+        possible_bids = 4 * [0] + 2 * [1] + 1 * [2] + 1 * [3]
+        return random.choice(possible_bids)
 
     def decide(self):
         # Randomly accepts or refuses it
@@ -21,7 +22,8 @@ class RandomPlayer(client.GamePlayer):
 
     def choose_trample(self):
         # Chooses some random suit if player won the bidding
-        return random.choice(list("SCHD"))
+        options = list("SCHD") + ['']
+        return random.choice(options)
 
 if __name__ == "__main__":
     usr = ''
