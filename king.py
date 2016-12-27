@@ -339,7 +339,7 @@ class KingTable:
                         else GameState.CHOOSE_TRAMPLE
             else:
                 # In case there is at least two bidders, go back to lowest offer
-                self.bid_turn = min(filter(lambda x: x[1] >= 0, \
+                self.bid_turn = min(filter(lambda x: x[1] > 0, \
                                     enumerate(self.bids)), key=itemgetter(1))[0]
 
         return True
