@@ -80,7 +80,8 @@ def join_table(usr_name, secret, table_name):
             players[player] = table
 
         # Send message for players signaling game start, send also players list
-        status_publisher.send_string('%s START %s'%(table_name, ' '.join([s.name for s in table.players])))
+        status_publisher.send_string('%s START %s'%(table_name, \
+                                                    ' '.join([s.name for s in table.players])))
         start_hand(table)
 
     return 'ACK'
@@ -160,7 +161,8 @@ def get_bid(usr_name, secret, value):
     if table.state is GameState.DECIDE_BID:
         status_publisher.send_string('%s DECIDE %s'%(table.name, table.players[table.turn].name))
     elif table.state is GameState.CHOOSE_TRAMPLE:
-        status_publisher.send_string('%s CHOOSETRAMPLE %s'%(table.name, table.players[table.turn].name))
+        status_publisher.send_string('%s CHOOSETRAMPLE %s'%(table.name, \
+                                                            table.players[table.turn].name))
     else:
         status_publisher.send_string('%s BID %s'%(table.name, table.players[table.bid_turn].name))
 

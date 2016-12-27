@@ -441,6 +441,12 @@ class KingTable:
         if self.state is not GameState.HAND_OVER:
             return False
 
+        if isinstance(self.game, Positiva) and self.bid_turn != self.turn:
+            # Fix score based on bids placed
+            # TODO Decide what rule to apply if bid winner doesn't have enough pts
+            self.score[-1][self.bid_turn] -= self.bids[self.bid_turn] * 25 # Each bid is 25 poits
+            self.score[-1][self.turn] += self.bids[self.bid_turn] * 25
+
         self.state = GameState.CHOOSE_HAND if len(self.score) < 10 else GameState.GAME_OVER
         return True
 
