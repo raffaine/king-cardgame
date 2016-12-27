@@ -183,6 +183,7 @@ class Game:
 
     def H_BIDS(self, value):
         """ Handles the bidding value info """
+        #TODO Fix this, a bid of 0 is valid but means forefeit
         self.max_bid = int(value) # I can assume that server only inform valid bids
         self.max_bidder = self.bidder
         self.player.inform_bid()
@@ -233,7 +234,7 @@ class Game:
 
     def H_PLAY(self, card):
         """ Handles the Card playing information """
-        self.table.append(card)
+        self.table.append((self.turn, card))
         self.player.card_played()
 
     def H_ENDROUND(self, winner):
