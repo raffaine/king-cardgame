@@ -425,7 +425,7 @@ class KingTable:
 
         (winner, pts) = self.game.play_round(self.table)
 
-        self.turn = winner
+        self.turn = (self.turn + winner) % 4
         self.table = []
         self.score[-1][self.turn] += pts
 

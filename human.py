@@ -31,6 +31,7 @@ class HumanPlayer(client.GamePlayer):
         return choice
 
     def bid(self):
+        print_hand(self)
         print("You have a chance to bid, inform value:")
         bid = -1
         while bid < 0:
@@ -41,19 +42,50 @@ class HumanPlayer(client.GamePlayer):
 
         return bid
 
+    def inform_bid(self):
+        name = self.game.max_bidder if self.game.max_bidder != USR_NAME else 'You'
+        #TODO if bid was 0, then it means forefeiting
+        print(name, "bid", self.game.max_bid)
+        time.sleep(2)
+
+    def decide(self):
+        print("Time for you to decide, do you accept ", self.game.max_bidder, \
+              " bid of ", self.game.max_bid, "? (y/N)")
+        return input('>').lower() == 'y'
+
+    def choose_trample(self):
+        if self.game.turn != USR_NAME:
+            print("You win the auction with a bid of ", self.game.max_bid)
+        print("Choose a trample suit (S, H, D, C) or empty for no trample:")
+        res = 'I'
+        while res and res not in "SHDC":
+            res = input('>').capitalize()
+
+        return res
+
     def game_selected(self):
         clear_screen()
         print("A new hand started. The game will be", self.game.game)
+        if self.game.trample:
+            print("Trample suit is ", self.game.trample)
         time.sleep(2)
 
     def play_card(self):
         clear_screen()
         print("It's your turn, choose card. (Game is %s)\n"%(self.game.game))
-        print_hand(self)
+        if self.game.trample:
+            print("Trample suit is ", self.game.trample)
+
+        print("Your Hand:", list(enumerate(self.game.hand)), "\n")
         print("Table is:", self.game.table)
         card = ''
         while not card:
-            res = input('>')
+            res = input('>').capitalize()
+            try:
+                res = self.game.hand[int(res)]
+            except (ValueError, IndexError):
+                pass
+
             card = res if res in self.game.hand else ''
 
         return card
