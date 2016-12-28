@@ -10,3 +10,4 @@ bin/
 obj/
 .vscode/
 logs/
+node_modules/
