@@ -18,7 +18,7 @@
         <form action="">
             <input id="m" autocomplete="off" /><button>Send</button>
         </form>
-        <script src="/socket.io/socket.io.js"></script>
+        <script src="http://linuxhost-t6r6208s.cloudapp.net:8086/socket.io/socket.io.js"></script>
         <script src="http://code.jquery.com/jquery-1.11.1.js"></script>
         <script>
             // Game State - Used to keep track of game state
@@ -32,8 +32,10 @@
                 }
             }
 
-            var socket = io(); // automattically connect with the host serving the page no need for io.connect('http://localhost:8080');
-            
+            //var socket = io(); // automattically connect with the host serving the page
+            // If server is running, I can run this locally!
+            var socket = io.connect('http://linuxhost-t6r6208s.cloudapp.net:8086');
+
             socket.on('response', function(data) {
                 $('#messages').append($('<li>').text('SERVER RESPONSE: ' + data));
             });
