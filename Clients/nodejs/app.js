@@ -17,11 +17,12 @@ info.connect('tcp://127.0.0.1:5556');
 info.subscribe('');
 
 // Setup Subscribe channel handler (very simple, just filter based on rooms)
-info.on('message', function(data) {
+info.on('message', function(topic, data) {
+    console.log('[SUBSCRIPTION] '+ topic.toString());
     // data always follows format TABLE MSG *CONTENTS (contents cardinality is 0..*)
-    var args = data.toString().split(' ', 1);
+    var args = topic.toString().split(' ', 1);
     // TODO: Remove table from message before passing it to client
-    io.to(args[0]).emit('info', data.toString());
+    io.to(args[0]).emit('info', topic.toString());
 });
 
 // TODO: Game state is not handled by the server, this should be on client
@@ -52,12 +53,12 @@ io.on('connection', function(client){
         console.log(`${client.id} requested ${data}`);
 
         // SPECIAL HANDLING OF MESSAGE JOIN, I need to join room before knowing it was successfull
-        var arr = data.split(' ', 2);
+        var arr = data.split(' ', 4);
         // User requested a join, if answer is 'ACK', it was successfull
-        if (arr.length > 1 && arr[0] == 'JOIN') {
+        if (arr.length > 3 && arr[0] == 'JOIN') {
             // Handles special situation where player joins a table (successfully)
             // We temporarily join room so we don't miss any events on that table
-            client.table = arr[1];
+            client.table = arr[3];
             client.join(client.table);
             console.log(`${client.id} about joins ${client.table}`);
         }
