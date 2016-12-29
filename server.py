@@ -37,6 +37,16 @@ def create_table(table_name):
     tables[table_name] = KingTable(table_name)
     return 'ACK'
 
+def close_table(table_name):
+    """ Helper function for table removal """
+    # Remove table from tables
+    table = tables.pop(table_name)
+    # Optionally I can have a different message for game aborted
+    status_publisher.send_string('%s GAMEOVER'%(table.name))
+    # Remove players from quick access dict
+    for player in table.players:
+        players.pop(player, None)
+
 def list_tables():
     """Manager Logic: LIST - List all available tables"""
     return json.dumps(list(map(lambda item: item[0], \
@@ -46,11 +56,11 @@ def list_tables():
 def leave_table(usr_name, secret):
     """Game Logic: LEAVE - Used to remove players from a table"""
     player = KingPlayer(usr_name, secret)
-    table = players.get(player, None)
+    table = players.pop(player, None)
+
+    # Remove player from table and abort if it was running
     if table and table.state is not GameState.NOT_STARTED:
-        # Optionally I can have a different message for game aborted
-        status_publisher.send_string('%s GAMEOVER'%(table.name))
-        # TODO Remove table from tables
+        close_table(table.name)
     elif table:
         table.players.remove(player)
     else:
@@ -228,8 +238,7 @@ def play_card(usr_name, secret, card):
             status_publisher.send_string('%s ENDHAND'%(table.name))
             # Check for a game over
             if table.end_game():
-                status_publisher.send_string('%s GAMEOVER'%(table.name))
-                # TODO Setup some logic for table clean up
+                close_table(table.name)
             else:
                 # Sets up new hand
                 start_hand(table)
