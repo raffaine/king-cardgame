@@ -25,26 +25,22 @@ info.on('message', function(topic, data) {
     io.to(args[0]).emit('info', topic.toString());
 });
 
-// TODO: Game state is not handled by the server, this should be on client
-var game = {
-    actions: {
-        'STARTHAND': function(params) {
-        },
-        'TURN': function(params) {
-            action.send(`PLAY ${user} ${secret} ${game.hand[0]}`);
-            console.log("taking any turn, hahaha ... but won't harm");
-        }
-    }
-}
-
 // Set up client specific behavior during handle of client connection
 io.on('connection', function(client){
     console.log(`Client ${client.id} connected ...`);
 
     // Setup handler for client disconnection
     client.on('disconnect', function(){
-        // TODO: Try to identify by name and handle table early exit (LEAVE msg on ZMQ)
-        console.log('Client has disconnected.');
+        if (client.table) {
+            // Try to gracefuly leave the table on ZMQ server
+            action.once('response', function(response) {
+                if (response.toString() !== 'ACK') {
+                    console.log('ERROR LEAVING TABLE ON DISCONNECTION!!!');
+                }
+            });
+            action.send(`LEAVE ${client.user} ${client.secret}`);
+        }
+        console.log(`Client ${client.id} has disconnected.`);
     });
 
     // Handle action messages (REQ/REP)
@@ -52,30 +48,45 @@ io.on('connection', function(client){
         // Here is where ZMQ and Socket.io talk with each other
         console.log(`${client.id} requested ${data}`);
 
-        // SPECIAL HANDLING OF MESSAGE JOIN, I need to join room before knowing it was successfull
+        // SPECIAL HANDLING OF MESSAGES JOIN and LEAVE
         var arr = data.split(' ', 4);
         // User requested a join, if answer is 'ACK', it was successfull
-        if (arr.length > 3 && arr[0] == 'JOIN') {
-            // Handles special situation where player joins a table (successfully)
+        if (arr.length > 3 && arr[0] === 'JOIN') {
+            // Handles special situation where player attempts to join a table
             // We temporarily join room so we don't miss any events on that table
             client.table = arr[3];
+            client.user = arr[1];
+            client.secret = arr[2];
+            client.joinning = true;
             client.join(client.table);
-            console.log(`${client.id} about joins ${client.table}`);
+            console.log(`${client.id} joins ${client.table}`);
         }
-        // TODO: Handle leaving the table ... client.leave(table);
+        else if (arr.length > 2 && arr[0] === 'LEAVE') {
+            client.leaving = true;
+        }
 
         // Setup an event listener to handle the ZMQ server response
         action.once('message', function(response) {
             console.log(`Server response was ${response}`);
-            if (client.table) {
+            // Special handling for JOIN message
+            if (client.table && client.joinning) {
                 // Leave Socket.io room if answer was not ACK
                 if (response.toString() !== 'ACK') {
                     console.log(`${client.id} leaves ${client.table}`);
                     client.leave(client.table);
+
+                    delete client.table;
                 }
 
-                delete client.table;
+                delete client.joinning;
             }
+            // Final stage of LEAVE message
+            else if (client.leaving) {
+                client.leave(client.table);
+                delete client.leaving;
+            }
+
+            // Send the response back to client
             client.emit('response', response.toString());
         });
 
