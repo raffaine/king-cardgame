@@ -44,6 +44,16 @@ Estes requisitos representam os ambientes e linguagens atualmente suportadas,
 suporte este podendo variar de oferta de um cliente base ou apenas stubs exemplo
 para comunicação efetiva com servidor.
 
+* NodeJS **(Em desenvolvimento)**
+ + Dependencias estão listadas no arquivo package.json, para instalar as dependências
+rode o comando abaixo no diretório do cliente.
+    npm install
+ + Devido a falta de experiência no ambiente altamente baseado em eventos do NodeJS,
+não sei ao certo se existe execução em paralelo ou threads. O código foi escrito
+assumindo que isso não é o caso.
+ + O cliente NodeJS produz um servidor WebSocket e entrega a página para o navegador,
+sendo esta página o local onde a lógica de interação com o servidor ZeroMQ esta definida.
+
 * C# Console **(Não Testado)**
    + RabbitMQ .NET Client v3.0.1 (Adicionado como um submodule do repositorio)
    + Adicionar a referencia a DLL RabbitMQ.Client.dll na Solution
