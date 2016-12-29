@@ -18,11 +18,13 @@ info.subscribe('');
 
 // Setup Subscribe channel handler (very simple, just filter based on rooms)
 info.on('message', function(topic, data) {
-    console.log('[SUBSCRIPTION] '+ topic.toString());
+    // For some reason, data is empty and all message is on topic
+    var msg = topic.toString();
+    console.log('[SUBSCRIPTION] '+ msg);
     // data always follows format TABLE MSG *CONTENTS (contents cardinality is 0..*)
-    var args = topic.toString().split(' ', 1);
-    // TODO: Remove table from message before passing it to client
-    io.to(args[0]).emit('info', topic.toString());
+    var args = msg.split(' ', 1);
+    msg = msg.substr(args[0].length);
+    io.to(args[0]).emit('info', msg);
 });
 
 // Set up client specific behavior during handle of client connection
