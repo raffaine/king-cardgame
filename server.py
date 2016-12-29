@@ -43,17 +43,15 @@ def list_tables():
                            filter(lambda item: len(item[1].players) < 4, \
                            tables.items()))))
 
-def leave_table(usr_name, secret, table_name):
-    """Game Logic: LEAVE - Used to remove players from a waiting table"""
+def leave_table(usr_name, secret):
+    """Game Logic: LEAVE - Used to remove players from a table"""
     player = KingPlayer(usr_name, secret)
-    if player in players:
-        return 'ERROR Cannot leave running table ... yet'
-
-    table = tables.get(table_name, None)
-    if not table:
-        return 'ERROR Table does not exist'
-
-    if player in table.players:
+    table = players.get(player, None)
+    if table and table.state is not GameState.NOT_STARTED:
+        # Optionally I can have a different message for game aborted
+        status_publisher.send_string('%s GAMEOVER'%(table.name))
+        # TODO Remove table from tables
+    elif table:
         table.players.remove(player)
     else:
         return 'ERROR Player not in table'
@@ -63,7 +61,7 @@ def leave_table(usr_name, secret, table_name):
 def join_table(usr_name, secret, table_name):
     """Game Logic: JOIN - Used to add new players to an existing table"""
     player = KingPlayer(usr_name, secret)
-    if player in players or player in flatten(map(lambda t: t.players, iter(tables.values()))):
+    if player in players:
         return 'ERROR Player already in table'
 
     table = tables.get(table_name, None)
@@ -73,15 +71,15 @@ def join_table(usr_name, secret, table_name):
     if not table.join_table(player):
         return 'ERROR Table is already full'
 
-    if table.start():
-        # Game ready to start, handle main protocol
-        # Quick access to game from player's info
-        for player in table.players:
-            players[player] = table
+    # Quick access to game from player's info
+    players[player] = table
 
+    # If game ready to start, handles main protocol
+    if table.start():
         # Send message for players signaling game start, send also players list
         status_publisher.send_string('%s START %s'%(table_name, \
                                                     ' '.join([s.name for s in table.players])))
+        # Send info regarding the start of a hand
         start_hand(table)
 
     return 'ACK'
