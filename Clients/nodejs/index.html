@@ -12,6 +12,9 @@
             #messages li { padding: 5px 10px; }
             #messages li:nth-child(odd) { background: #eee; }
         </style>
+        
+        <link href="./cards.css" rel="stylesheet" type="text/css" />
+        <link href="./blackjack_table.css" rel="stylesheet" type="text/css" />
     </head>
     <body>
         <ul id="messages"></ul>
@@ -20,18 +23,9 @@
         </form>
         <script src="http://linuxhost-t6r6208s.cloudapp.net:8086/socket.io/socket.io.js"></script>
         <script src="http://code.jquery.com/jquery-1.11.1.js"></script>
+        <script src="./cards.js" type="text/javascript"> </script>
+        <script src="./king.js" type="text/javascript"></script>
         <script>
-            // Game State - Used to keep track of game state
-            var game = {
-                actions: {
-                    'STARTHAND': function(params) {
-                    },
-                    'TURN': function(params) {
-                       socket.emit('action', `PLAY ${user} ${secret} ${game.hand[0]}`);
-                    }
-                }
-            }
-
             //var socket = io(); // automattically connect with the host serving the page
             // If server is running, I can run this locally!
             var socket = io.connect('http://linuxhost-t6r6208s.cloudapp.net:8086');
