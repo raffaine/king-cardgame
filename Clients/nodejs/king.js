@@ -33,6 +33,7 @@ function Game(user) {
     // Define the set of information that can be received from the server
     this.info = {
                     'START': function(game, players) {
+                        show_message("The game has started");
                         game.table.setPlayers(players);
                     },
                     'STARTHAND': function(game, params) {
@@ -62,6 +63,7 @@ function Game(user) {
                         //Receive info about what are the current rules
                         game.cur_game = choice[0];
                         game.state = GameStates.RUNNING;
+                        show_message("The game is " + choice);
                     },
                     'TURN': function(game, player) {
                         //No action unless you are the player
@@ -75,9 +77,9 @@ function Game(user) {
     socket.game = this;
     socket.on('info', function(message) {
         var args = message.split(' ');
-        //TODO: Fix the server to stop sending space at the start (when this happen, change from 1 to 0 and from 2 to 1)
-        if (fn = this.game.info[args[1]]) {
-            fn(this.game, args.slice(2));
+        // Strip the message header and use it to call the proper handle
+        if (fn = this.game.info[args[0]]) {
+            fn(this.game, args.slice(1));
         }
     });
 }
@@ -99,12 +101,56 @@ function Table() {
 
 function Hand() {
     this.cards = new Array;
+    this.hand_area = document.getElementById('playerCards');
 
     this.setCards = function(cards) {
-        this.cards = cards; //TODO: Create Nodes on Hands area and so
+        this.cards = cards;
+
+        var nodes = this.hand_area;
+        cards.slice(0,-1).forEach(function(card){
+            var node = (new Card(card[0], card[1])).createNode();
+            node.style.transition = "all 3s ease-out";
+            nodes.appendChild(node);
+        });
+        //Keep the last element hidden
+        var card = cards.slice(-1)[0];
+        var node = (new Card(card[0], card[1])).createNode();
+        node.firstChild.style.visibility = 'hidden';
+        node.style.transition = "all 3s ease-out";
+        nodes.appendChild(node);
+
+        //Show cards
+        for (var i = 0; i < nodes.childNodes.length; i++) {
+            var effect = `translateX(${2*i}em)`;
+            var node = nodes.childNodes[i];
+            if (i === nodes.childNodes.length - 1 ) {
+                effect += ' rotateY(180deg)';
+                node.firstChild.style.transition = "all 3s 0.1s ease-out";
+                node.firstChild.style.visibility = "visible";
+            }
+	        node.style.transform = effect;
+        }
+    }
+
+    this.emptyHand = function() {
+        while(this.hand_area.hasChildNodes()) {
+            this.hand_area.removeChild(this.hand_area.lastChild);
+        }
     }
 
     this.playCard = function(index) {
-        this.cards.splice(index, 1); //TODO: Card must have a way of knowing its index
+         //TODO: Card must have a way of knowing its index
+        var card = this.cards.splice(index, 1);
     }
+}
+
+function show_message(message) {
+    var box = document.getElementById('infobox');
+    var content = document.getElementById('infocontent')
+    content.textContent = message;
+
+    box.addEventListener('animationend', function(evt) {
+        box.style.animation = "";
+    });
+    box.style.animation = "showinfo 3s ease-out 0.5s forwards";
 }

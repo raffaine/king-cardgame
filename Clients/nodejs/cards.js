@@ -20,6 +20,9 @@
 function Card(rank, suit) {
 
   this.rank = rank;
+  if (rank === 'T') {
+      rank = '10';
+  }
   this.suit = suit;
 
   this.toString   = cardToString;
