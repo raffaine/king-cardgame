@@ -3,7 +3,12 @@
 }
 
 #console-btn { 
-    position: absolute; left: 10px; padding: 3px;
+    position: absolute; left: 1em; padding: 3px;
+    border-radius: 25%; 
+}
+
+#start-btn { 
+    position: absolute; left: 3em; padding: 3px;
     border-radius: 25%; 
 }
 

@@ -7,11 +7,12 @@
     </head>
     <body>
         <div id="infobox">
-            <span id="infocontent"> Lorem Ipsum Dolores bla bla bla bla bla </span>
+            <span id="infocontent"> </span>
         </div>
         <!-- Header. -->
         <div id="header">
             <button id="console-btn">C</button>
+            <button id="start-btn">S</button>
             <h2> King </h2>
         </div>
         
@@ -48,6 +49,7 @@
             //var socket = io(); // automattically connect with the host serving the page
             // If server is running, I can run this locally!
             var socket = io.connect('http://linuxhost-t6r6208s.cloudapp.net:8086');
+            var cur_game = null;
 
             socket.on('response', function(data) {
                 $('#messages').append($('<li>').text('RESPONSE: ' + data));
@@ -69,6 +71,14 @@
                     elem.removeClass('visible');
                 } else {
                     elem.addClass('visible');
+                }
+            });
+
+            $('#start-btn').on('click', function(evt){
+                if (cur_game === null) {
+                    var name = prompt('Enter name:');
+                    cur_game = new Game(name);
+                    hunt_table(cur_game);
                 }
             });
         </script>
