@@ -22,9 +22,8 @@ info.on('message', function(topic, data) {
     var msg = topic.toString();
     console.log('[SUBSCRIPTION] '+ msg);
     // data always follows format TABLE MSG *CONTENTS (contents cardinality is 0..*)
-    var args = msg.split(' ', 1);
-    msg = msg.substr(args[0].length);
-    io.to(args[0]).emit('info', msg);
+    var args = msg.split(' ');
+    io.to(args[0]).emit('info', args.slice(1).join(' '));
 });
 
 // Set up client specific behavior during handle of client connection
@@ -60,6 +59,7 @@ io.on('connection', function(client){
             client.user = arr[1];
             client.secret = arr[2];
             client.joinning = true;
+
             client.join(client.table);
             console.log(`${client.id} joins ${client.table}`);
         }
