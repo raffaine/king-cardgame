@@ -347,13 +347,21 @@ function hunt_table(game) {
 }
 
 function show_message(message) {
-    //TODO: Detect animation in progress and put next request on setTimeout
     var box = document.getElementById('infobox');
-    var content = document.getElementById('infocontent')
-    content.textContent = message;
 
-    box.addEventListener('animationend', function(evt) {
-        box.style.animation = "";
-    });
-    box.style.animation = "showinfo 3s ease-out 0.5s forwards";
+    if (box.classList.contains('animated')) {
+        setTimeout(function() {
+            show_message(message);
+        }, 500);
+    } else {
+        var content = document.getElementById('infocontent')
+        content.textContent = message;
+
+        box.addEventListener('animationend', function(evt) {
+            box.style.animation = "";
+            box.classList.remove('animated');
+        });
+        box.classList.add('animated');
+        box.style.animation = "showinfo 3s ease-out 0.5s forwards";
+    }
 }
