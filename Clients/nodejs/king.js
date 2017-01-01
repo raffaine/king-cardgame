@@ -1,4 +1,27 @@
 
+var TranslateChoices = {
+    '0': 'Forefeit',
+    '1': '1 Trick',
+    '2': '2 Tricks',
+    '3': '3 Tricks',
+    '4': '4 Tricks',
+    '5': '5 Tricks',
+    'C': 'Clubs',
+    'S': 'Spades',
+    'H': 'Hearts',
+    'D': 'Diamonds',
+    ' ': 'No Trample',
+    'COPAS': 'No Hearts',
+    'VAZA': 'No Tricks', 
+    'MULHERES': 'No Queens',
+    'POSITIVA': 'Positive',
+    'HOMENS': 'No Jacks and Kings',
+    'KING': 'No King of Hearts',
+    '2ULTIMAS': 'No Last 2 Tricks',
+    'True': 'Yes, I accept',
+    'False': 'No, I will choose'
+}
+
 var GameStates = {
     NOT_STARTED: "NOT STARTED",
     PENDING_GAME: "STARTED BUT NO GAME",
@@ -50,37 +73,58 @@ function Game(user) {
         this.table.addCard(card);
     };
 
+    // Helper function used to generate option UI to the user
+    this.createChoiceBox = function(title, body, choices, action) {
+        var e = $("<div id='choiceArea'></div>").appendTo($('body'))
+                .append(`<h2>${title}</h2>`)
+                .append(`<span>${body}</span>`)
+                .append('<br />');
+
+        for (var i=0; i < choices.length; i++) {
+            e.append(
+                $('<button></button>')
+                .text(TranslateChoices[choices[i]])
+                .on('click', function(game, choice){
+                    return function(evt) {
+                        game.sendAction(action, choice, function(msg) {
+                            console.log(`${action} with ${choice} selected, answer: ${msg}`);
+                            $('#choiceArea').remove();
+                        });
+                    };
+                }(this, choices[i])));
+        }
+
+        e.addClass('active');
+    }
+
     // Show user what hand options are available and get the choice
     this.chooseGame = function(choices) {
-        //TODO: Present choices to user in an overlay screen
-        var num = Math.random() * choices.length | 0;
-        this.sendAction('GAME', choices[num], function(msg) {
-            console.log('Game has been selected, answer: ' + msg);
-        });
+        this.createChoiceBox("New Hand, what's the game?",
+                        "These are the choices, click the one you want to play.",
+                        choices, 'GAME');
     };
 
     // Show user UI so he can select what is his bids
     this.getBid = function() {
-        //TODO: Present choice to user, now I'm just forefeiting
-        this.sendAction('BID', '0', function(msg) {
-            console.log('Player forefeits the bid, answer: ' + msg);
-        });
+        //TODO Fill the blanks and generate choices based on current max bid
+        this.createChoiceBox("You're the current man on, how much will you give?",
+                        "The best here would be a story about the bidding.",
+                        "012345".split(''), 'BID');
     };
 
     // Show user UI so he can decide if he accepts or not the winning bid
     this.getDecision = function() {
-        //TODO: Present choice to user, now I'm just refusing all
-        this.sendAction('DECIDE', 'False', function(msg) {
-            console.log('Player refuses the winning bid, answer: ' + msg);
-        });
+        //TODO: Fill the blanks
+        this.createChoiceBox("We have a winning bid, do you take it?",
+                        "Player X offered Y tricks for the choice.",
+                        ['True', 'False'], 'DECIDE');
     };
 
     // Show user UI so he can decide what is the trample suit
     this.getTrample = function() {
-        //TODO: Present choice to user, now I'm just choosing Clubs
-        this.sendAction('TRAMPLE', 'C', function(msg) {
-            console.log('Player chooses clubs, answer: ' + msg);
-        });
+        this.createChoiceBox("You've got the choice!",
+                        "Choose one of the suits as the trample suit.",
+                        "CDHS ".split(''), 'TRAMPLE');
     };
 
     // Generic function used to Send some action to server
@@ -274,29 +318,15 @@ function Hand(game) {
         this.cards = cards;
         this.emptyHand();
 
-        // Create cards
+        // Create cards and set animation
         for (var i = 0; i < cards.length; i++) {
             var card = cards[i];
             var node = (new Card(card[0], card[1])).createNode();
             node.onclick = this.createClickCallback(card);
-            node.style.transition = "all 3s ease-out";
-            if (i == cards.length - 1) {
-                node.firstChild.style.visibility = 'hidden';
-                node.firstChild.style.transition = "all 3s 0.1s ease-out";
-            }
+            $(node).playKeyframe(`handCard${i} 3s forwards`);
+            //node.style.animation = `handCard${i} 3s forwards`
             
             this.hand_area.appendChild(node);
-        }
-
-        // Show cards using animation
-        for (var i = 0; i < this.hand_area.childNodes.length; i++) {
-            var effect = `translateX(${2*i}em)`; //TODO: Make it proportional to the available area
-            var node = this.hand_area.childNodes[i];
-            if (i === this.hand_area.childNodes.length - 1 ) {
-                effect += ' rotateY(180deg)';
-                node.firstChild.style.visibility = "visible";
-            }
-	        node.style.transform = effect;
         }
     }
 
