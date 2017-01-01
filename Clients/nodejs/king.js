@@ -3,6 +3,7 @@ var GameStates = {
     NOT_STARTED: "NOT STARTED",
     PENDING_GAME: "STARTED BUT NO GAME",
     RUNNING: "RUNNING",
+    ROUND_ENDING: "ENDING THE ROUND",
     WAITING_GAME: "WAITING FOR GAME",
     WAITING_BID: "WAITING FOR A BID",
     WAITING_DECISION: "WAITING FOR DECISION",
@@ -26,15 +27,61 @@ function Game(user) {
     this.secret = 'whatever'; //TODO: I think it's obvious
     this.hand = new Hand(this);
     this.state = GameStates.NOT_STARTED;
-    this.choices = new Array;
     this.cur_game = '';
+    this.turn = '';
 
-    this.playCard = function(card, player) {
-        var position = this.table.players[player];
+    // Receives the command to play a card from player
+    // Only plays if it's player's turn
+    this.play = function(card) {
+        if (this.state === GameStates.WAITING_PLAY) {
+            this.sendAction('PLAY', card, function(msg){
+                console.log('Played card ' + card + "\nAnswer: " + msg);
+            });
+        }
+    };
+
+    // Used to process all card playing on the table
+    this.playCard = function(card) {
+        var position = this.table.players[this.turn];
         if ( position === PlayerPosition.BOTTOM) {
             this.hand.playCard(card);
         }
-    }
+
+        this.table.addCard(card);
+    };
+
+    // Show user what hand options are available and get the choice
+    this.chooseGame = function(choices) {
+        //TODO: Present choices to user in an overlay screen
+        var num = Math.random() * choices.length | 0;
+        this.sendAction('GAME', choices[num], function(msg) {
+            console.log('Game has been selected, answer: ' + msg);
+        });
+    };
+
+    // Show user UI so he can select what is his bids
+    this.getBid = function() {
+        //TODO: Present choice to user, now I'm just forefeiting
+        this.sendAction('BID', '0', function(msg) {
+            console.log('Player forefeits the bid, answer: ' + msg);
+        });
+    };
+
+    // Show user UI so he can decide if he accepts or not the winning bid
+    this.getDecision = function() {
+        //TODO: Present choice to user, now I'm just refusing all
+        this.sendAction('DECIDE', 'False', function(msg) {
+            console.log('Player refuses the winning bid, answer: ' + msg);
+        });
+    };
+
+    // Show user UI so he can decide what is the trample suit
+    this.getTrample = function() {
+        //TODO: Present choice to user, now I'm just choosing Clubs
+        this.sendAction('TRAMPLE', 'C', function(msg) {
+            console.log('Player chooses clubs, answer: ' + msg);
+        });
+    };
 
     // Generic function used to Send some action to server
     this.sendAction = function(action, params, fnResponse) {
@@ -48,45 +95,108 @@ function Game(user) {
 
     // Define the set of information that can be received from the server
     this.info = {
-                    'START': function(game, players) {
-                        show_message("The game has started");
-                        game.table.setPlayers(players);
-                    },
-                    'STARTHAND': function(game, params) {
-                        //params[0] is starter, params[1:-1] is list of possible games as strings
-                        //TODO: Set the current_turn to point to params[0] table position
-                        //THE TIMEOUT IS TO FIX A RACE CONDITION IF YOU ARE THE LAST ONE TO JOIN
-                        setTimeout( function() {
-                            // Attempt to get the player's hand
-                            game.sendAction('GETHAND', '', function(response) {
-                                if (!response.startsWith('ERROR')) {
-                                    console.log(response);
-                                    game.hand.setCards(JSON.parse(response));
-                                }
-                            });
-                        }, 1000);
+            'START': function(game, players) {
+                show_message("The game has started");
+                game.table.setPlayers(players);
+            },
+            'STARTHAND': function(game, params) {
+                //params[0] is starter, params[1:-1] is list of possible games as strings
+                //TODO: Handle ROUND_ENDING ...
+                //THE TIMEOUT IS TO FIX A RACE CONDITION IF YOU ARE THE LAST ONE TO JOIN
+                setTimeout( function() {
+                    // Attempt to get the player's hand
+                    game.sendAction('GETHAND', '', function(response) {
+                        if (!response.startsWith('ERROR')) {
+                            console.log(response);
+                            game.hand.setCards(JSON.parse(response));
+                        }
+                    });
+                }, 1000);
 
-                        // Set the state of the game according to whom is the starter
-                        if(params[0] === game.user) {
-                            game.state = GameStates.WAITING_GAME;
-                            game.choices = params.slice(1);
-                        } else {
-                            game.state = GameStates.PENDING_GAME;
-                        }
-                    },
-                    'GAME': function(game, choice) {
-                        //Receive info about what are the current rules
-                        game.cur_game = choice[0];
+                // Set the state of the game according to whom is the starter
+                game.table.setStarter(params[0]);
+                if(params[0] === game.user) {
+                    //game.state = GameStates.WAITING_GAME;
+                    game.chooseGame(params.slice(1));
+
+                } /*else {
+                    game.state = GameStates.PENDING_GAME;
+                }*/
+            },
+            'GAME': function(game, choice) {
+                //Receive info about what are the current rules
+                if (game.state === GameStates.ROUND_ENDING) {
+                    setTimeout(function() {
+                        game.info['GAME'](game, choice);
+                    }, 1000);
+                } else {
+                    game.cur_game = choice[0];
+                    game.state = GameStates.RUNNING;
+                    show_message("The game is " + choice);
+                }
+            },
+            'TURN': function(game, player) {
+                //No action unless you are the player
+                if (game.state === GameStates.ROUND_ENDING) {
+                    setTimeout(function() {
+                        game.info['TURN'](game, player);
+                    }, 1000);
+                } else {
+                    game.turn = player;
+                    if (player[0] == game.user) {
+                        game.state = GameStates.WAITING_PLAY;
+                    } else {
                         game.state = GameStates.RUNNING;
-                        show_message("The game is " + choice);
-                    },
-                    'TURN': function(game, player) {
-                        //No action unless you are the player
-                        if (player[0] == game.user) {
-                            game.state = GameStates.WAITING_PLAY;
-                        }
                     }
-                };
+                }
+            },
+            'PLAY': function(game, card) {
+                if (game.state === GameStates.ROUND_ENDING) {
+                    setTimeout(function() {
+                        game.info['PLAY'](game, card);
+                    }, 1000);
+                } else {
+                    game.playCard(card[0]);
+                }
+            },
+            'ENDROUND': function(game, winner) {
+                game.state = GameStates.ROUND_ENDING;
+                setTimeout( function() {
+                    game.table.endRound(winner[0]);
+                    game.state = GameStates.RUNNING;
+                }, 1500);
+            },
+            'ENDHAND': function(game, empty) {
+                //TODO: I'm planning to return the hand score here
+            },
+            'GAMEOVER': function(game, empty) {
+                //TODO: I'm planning to return the final score here
+            },
+            'BID': function(game, player) {
+                //TODO: Setup screen for bidding (on else collect who is bidding now)
+                if (player[0] === game.user) {
+                    game.state = GameStates.WAITING_BID;
+                    game.getBid();
+                }
+            },
+            'BIDS': function(game, value) {
+                //TODO: I need to store the current bidder to process the bids
+            },
+            'DECIDE': function(game, player) {
+                // Only action is if I'm the one that needs to decide
+                if (player[0] === game.user) {
+                    game.state = GameStates.WAITING_DECISION;
+                    game.getDecision();
+                }
+            },
+            'CHOOSETRAMPLE': function(game, player) {
+                // Only action is if I'm the one that needs to decide
+                if (player[0] === game.user) {
+                    game.state = GameStates.WAITING_TRAMPLE;
+                    game.getTrample();
+                }
+            }
+        };
 
     // Start listening on subscription channel
     socket.game = this;
@@ -104,7 +214,7 @@ function Table(user) {
     this.players = {};
     this.user = user;
     this.current_turn = 0;
-    this.hand_area = document.getElementById('tableCards');
+    this.area = document.getElementById('tableCards');
 
     this.setPlayers = function(players) {
         // This must be rearranged so Current Player is always on
@@ -121,12 +231,32 @@ function Table(user) {
     };
 
     this.setStarter = function(starter) {
-        this.current_turn = this.players[starter];this.hand_area
+        this.current_turn = this.players[starter];
     };
     
     this.addCard = function(card) {
-        this.cards.append(card); //TODO: Not sure how to properly animate this stuff
-        this.current_turn = (this.current_turn + 1) % 4;
+        this.cards.push(card);
+        //TODO: Better animation, the card must start from the side
+        //      where the player that played it is
+        //      It must go to center after it was added to the right area
+        var node = (new Card(card[0],card[1])).createNode();
+        node.style.transition = "all 3s ease-out";
+        this.area.appendChild(node);
+
+        node.style.transform = `translateX(${this.current_turn * 3}em)`;
+
+        this.current_turn = (this.current_turn + 1) % PlayerPosition.CAPACITY;
+    };
+
+    this.endRound = function(winner) {
+        //TODO: Animate cards going to winners side
+        this.cards = new Array;
+        
+        while(this.area.hasChildNodes()) {
+            this.area.removeChild(this.area.lastChild);
+        }
+
+        this.setStarter(winner);
     };
 }
 
@@ -136,14 +266,13 @@ function Hand(game) {
 
     this.createClickCallback = function(card) {
         return function(evt) {
-            if (game.state === GameStates.WAITING_PLAY) {
-                game.playCard(card, game.user);
-            }
+            game.play(card);
         };
     }
 
     this.setCards = function(cards) {
         this.cards = cards;
+        this.emptyHand();
 
         // Create cards
         for (var i = 0; i < cards.length; i++) {
@@ -178,6 +307,7 @@ function Hand(game) {
     }
 
     this.playCard = function(card) {
+        //TODO: Animate card when leaving hand
         var index = this.cards.indexOf(card);
         
         if (index !== -1) {
@@ -201,7 +331,7 @@ function hunt_table(game) {
                 console.log(msg); //TODO: Once better control of animations, I can show_message here
             });
         } else {
-            // TODO: I'm ignoring response here, since I don't really care
+            // I'm ignoring response here, since I don't really care
             socket.once('response', function(msg){
                 socket.once('response', fnJoinAny);
                 socket.emit('action', 'LIST');

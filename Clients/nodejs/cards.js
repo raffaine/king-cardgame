@@ -18,11 +18,12 @@
 //-----------------------------------------------------------------------------
 
 function Card(rank, suit) {
-
-  this.rank = rank;
+  // Small correction for the single char ranks
   if (rank === 'T') {
       rank = '10';
   }
+
+  this.rank = rank;
   this.suit = suit;
 
   this.toString   = cardToString;
