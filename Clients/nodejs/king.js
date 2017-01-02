@@ -284,10 +284,13 @@ function Table(user) {
         //      where the player that played it is
         //      It must go to center after it was added to the right area
         var node = (new Card(card[0],card[1])).createNode();
-        node.style.transition = "all 3s ease-out";
+        node.style.transformOrigin = 'center center';
+        //node.style.transition = "all 3s ease-out";
         this.area.appendChild(node);
 
-        node.style.transform = `translateX(${this.current_turn * 3}em)`;
+        $(node).playKeyframe(`tableCard${this.current_turn} 2s forwards`);
+
+        //node.style.transform = `translateX(${this.current_turn * 3}em)`;
 
         this.current_turn = (this.current_turn + 1) % PlayerPosition.CAPACITY;
     };

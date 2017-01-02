@@ -76,6 +76,50 @@
                 }
             });
 
+            var table = $('#tableCards');
+            var tempCard = $((new Card('2','C')).createNode())
+                            .css('visibility','hidden')
+                            .appendTo(table);
+
+            var middleTable = { x: table.innerWidth() / 2 - tempCard.width() / 2,
+                                y: table.innerHeight() / 2 - tempCard.height() / 2};
+
+            // Create animations for table playing
+            $.keyframe.define([{
+                name: `tableCard${PlayerPosition.BOTTOM}`,
+                from: {
+                    transform: `translate(${middleTable.x}px, ${table.innerHeight() + 100}px)`
+                },
+                to: {
+                    transform: `translate(${middleTable.x}px, ${middleTable.y + 50}px)`
+                }
+            }, {
+                name: `tableCard${PlayerPosition.LEFT}`,
+                from: {
+                    transform: `translate(${table.innerWidth() + 100}px, ${middleTable.y}px)`
+                },
+                to: {
+                    transform: `translate(${middleTable.x + 50}px, ${middleTable.y}px)`
+                }
+            }, {
+                name: `tableCard${PlayerPosition.TOP}`,
+                from: {
+                    transform: `translate(${middleTable.x}px, -100px)`
+                },
+                to: {
+                    transform: `translate(${middleTable.x}px, ${middleTable.y - 50}px)`
+                }
+            }, {
+                name: `tableCard${PlayerPosition.RIGHT}`,
+                from: {
+                    transform: `translate(-100px, ${middleTable.y}px)`
+                },
+                to: {
+                    transform: `translate(${middleTable.x - 50}px, ${middleTable.y}px)`
+                }
+            }]);
+
+
             var hand = $('#playerCards');
             var middle = hand.innerWidth() / 2;
 
@@ -93,12 +137,12 @@
                 {
                     name: 'playHandCard',
                     from: {
-                        transform: `translateX(${2*i}em) translateY(0em)`,
+                        transform: `translate(${2*i}em, 0em)`,
                         opacity: 1,
                         visibility: 'visible'
                     },
                     to: {
-                        transform: `translateX(${middle}px) translateY(-10em)`,
+                        transform: `translate(${middle}px, -10em)`,
                         opacity: 0,
                         visibility: 'hidden'
                     }

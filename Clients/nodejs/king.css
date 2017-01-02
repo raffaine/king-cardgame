@@ -161,6 +161,7 @@ border-color:  #006000 #90f090 #90f090 #006000;
     font-size: 20pt;
     height: 10em;
     position: relative;
+    overflow: hidden;
 }
 
 #player .cardArea {
