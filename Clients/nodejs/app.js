@@ -97,6 +97,10 @@ io.on('connection', function(client){
     });
 });
 
+// Make static css and js files available
+app.use(express.static('public'));
+app.use('/graphics', express.static('graphics'));
+
 // Simple express routing to provide client side page
 app.get('/', function(req, res) {
     res.sendFile(__dirname + '/index.html');

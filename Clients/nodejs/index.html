@@ -2,8 +2,8 @@
 <html>
     <head>
         <title> King, the card game </title>
-        <link href="./cards.css" rel="stylesheet" type="text/css" />
-        <link href="./king.css" rel="stylesheet" type="text/css" />
+        <link href="/cards.css" rel="stylesheet" type="text/css" />
+        <link href="/king.css" rel="stylesheet" type="text/css" />
     </head>
     <body>
         <div id="infobox">
@@ -34,15 +34,13 @@
                 <input id="m" autocomplete="off" /><button>Go</button>
             </form>
         </div>
-        <script src="http://linuxhost-t6r6208s.cloudapp.net:8086/socket.io/socket.io.js"></script>
+        <script src="/socket.io/socket.io.js"></script>
         <script src="http://code.jquery.com/jquery-3.1.1.js"></script>
-        <script src='./jquery.keyframes.js'></script>
-        <script src="./cards.js" type="text/javascript"> </script>
-        <script src="./king.js" type="text/javascript"></script>
+        <script src='/jquery.keyframes.js'></script>
+        <script src="/cards.js" type="text/javascript"> </script>
+        <script src="/king.js" type="text/javascript"></script>
         <script>
-            //var socket = io(); // automattically connect with the host serving the page
-            // If server is running, I can run this locally!
-            var socket = io.connect('http://linuxhost-t6r6208s.cloudapp.net:8086');
+            var socket = io(); // automattically connect with the host serving the page
             var cur_game = null;
 
             socket.on('response', function(data) {
