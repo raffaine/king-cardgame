@@ -107,14 +107,14 @@ function Game(user) {
     // Show user UI so he can select what is his bids
     this.getBid = function() {
         var choices = ['0']; //Forefeiting is always an option
-        var max = Math.max(this.table.bids);
+        var max = Math.max(...this.table.bids);
         if (max === -1) {
             max = 0;
         }
 
         // I'm limiting the bids to 5 as more it's very unusual
         for (var i = max + 1; i < 6; i++) {
-            choices.append(i.toString());
+            choices.push(i.toString());
         }
 
         //TODO: There is still a story to tell here
