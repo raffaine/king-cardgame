@@ -10,7 +10,7 @@ var TranslateChoices = {
     'S': 'Spades',
     'H': 'Hearts',
     'D': 'Diamonds',
-    ' ': 'No Trample',
+    '': 'No Trample',
     'COPAS': 'No Hearts',
     'VAZA': 'No Tricks', 
     'MULHERES': 'No Queens',
@@ -77,7 +77,7 @@ function Game(user) {
     this.createChoiceBox = function(title, body, choices, action) {
         var e = $("<div id='choiceArea'></div>").appendTo($('body'))
                 .append(`<h2>${title}</h2>`)
-                .append(`<span>${body}</span>`)
+                .append(`<p>${body}</p>`)
                 .append('<br />');
 
         for (var i=0; i < choices.length; i++) {
@@ -106,25 +106,42 @@ function Game(user) {
 
     // Show user UI so he can select what is his bids
     this.getBid = function() {
-        //TODO Fill the blanks and generate choices based on current max bid
+        var choices = ['0']; //Forefeiting is always an option
+        var max = Math.max(this.table.bids);
+        if (max === -1) {
+            max = 0;
+        }
+
+        // I'm limiting the bids to 5 as more it's very unusual
+        for (var i = max + 1; i < 6; i++) {
+            choices.append(i.toString());
+        }
+
+        //TODO: There is still a story to tell here
         this.createChoiceBox("You're the current man on, how much will you give?",
                         "The best here would be a story about the bidding.",
-                        "012345".split(''), 'BID');
+                        choices, 'BID');
     };
 
     // Show user UI so he can decide if he accepts or not the winning bid
     this.getDecision = function() {
-        //TODO: Fill the blanks
+        // Find the max bid and max bidder
+        var max = Math.max(...this.table.bids);
+        var max_bidder = this.table.players[this.table.bids.indexOf(max)];
+        
         this.createChoiceBox("We have a winning bid, do you take it?",
-                        "Player X offered Y tricks for the choice.",
+                        `${max_bidder} offered ${max} tricks for the choice.`,
                         ['True', 'False'], 'DECIDE');
     };
 
     // Show user UI so he can decide what is the trample suit
     this.getTrample = function() {
+        //TODO: BUG ON No Trample choice, I need to find out what's up
+        var choices = "CDHS".split('');
+        choices.push('');
         this.createChoiceBox("You've got the choice!",
                         "Choose one of the suits as the trample suit.",
-                        "CDHS ".split(''), 'TRAMPLE');
+                        choices, 'TRAMPLE');
     };
 
     // Generic function used to Send some action to server
@@ -176,7 +193,7 @@ function Game(user) {
                 } else {
                     game.cur_game = choice[0];
                     game.state = GameStates.RUNNING;
-                    show_message("The game is " + choice);
+                    show_message("The game is " + TranslateChoices[choice[0]]);
                 }
             },
             'TURN': function(game, player) {
@@ -203,7 +220,7 @@ function Game(user) {
                     game.playCard(card[0]);
                 }
             },
-            'ENDROUND': function(game, winner) {
+            'ENDROUND': function(game, winner) {;
                 game.state = GameStates.ROUND_ENDING;
                 setTimeout( function() {
                     game.table.endRound(winner[0]);
@@ -217,28 +234,35 @@ function Game(user) {
                 //TODO: I'm planning to return the final score here
             },
             'BID': function(game, player) {
-                //TODO: Setup screen for bidding (on else collect who is bidding now)
+                // Collect current bidder
+                game.table.setBidder(player[0]);
+
+                // Setup screen for bidding if user is player
                 if (player[0] === game.user) {
                     game.state = GameStates.WAITING_BID;
                     game.getBid();
                 }
             },
             'BIDS': function(game, value) {
-                //TODO: I need to store the current bidder to process the bids
+                // Collect current bid
+                game.table.setBid(value[0]);
             },
             'DECIDE': function(game, player) {
-                // Only action is if I'm the one that needs to decide
+                // Setup screen if I'm the one that needs to decide
                 if (player[0] === game.user) {
                     game.state = GameStates.WAITING_DECISION;
                     game.getDecision();
                 }
             },
             'CHOOSETRAMPLE': function(game, player) {
-                // Only action is if I'm the one that needs to decide
+                // Setup screen if I'm the one that needs to decide
                 if (player[0] === game.user) {
                     game.state = GameStates.WAITING_TRAMPLE;
                     game.getTrample();
                 }
+                //TODO: Bid is over, on else show a message stating what happened
+                // e.g (No bids were made, A is gonna choose)
+                // e.g (A offered X but B refused, B to choose )
             }
         };
 
@@ -256,8 +280,10 @@ function Game(user) {
 function Table(user) {
     this.cards = new Array;
     this.players = {};
+    this.bids = new Array;
     this.user = user;
     this.current_turn = 0;
+    this.current_bidder = 0;
     this.area = document.getElementById('tableCards');
 
     this.setPlayers = function(players) {
@@ -276,34 +302,48 @@ function Table(user) {
 
     this.setStarter = function(starter) {
         this.current_turn = this.players[starter];
+        this.bids = [-1, -1, -1, -1];
+        this.bids[this.current_turn] = -2;
     };
     
     this.addCard = function(card) {
         this.cards.push(card);
-        //TODO: Better animation, the card must start from the side
-        //      where the player that played it is
-        //      It must go to center after it was added to the right area
+
         var node = (new Card(card[0],card[1])).createNode();
         node.style.transformOrigin = 'center center';
-        //node.style.transition = "all 3s ease-out";
         this.area.appendChild(node);
 
         $(node).playKeyframe(`tableCard${this.current_turn} 2s forwards`);
-
-        //node.style.transform = `translateX(${this.current_turn * 3}em)`;
 
         this.current_turn = (this.current_turn + 1) % PlayerPosition.CAPACITY;
     };
 
     this.endRound = function(winner) {
-        //TODO: Animate cards going to winners side
         this.cards = new Array;
         
+        // Display a message to notify the round winner
+        var msg = '';
+        if( winner === this.user) {
+            msg = 'You take the round';
+        } else {
+            msg = `${winner} takes the round`;
+        }
+        show_message(msg, '2s');
+
+        //TODO: Animate cards going to winners side
         while(this.area.hasChildNodes()) {
             this.area.removeChild(this.area.lastChild);
         }
 
         this.setStarter(winner);
+    };
+
+    this.setBidder = function(bidder) {
+        this.current_bidder = this.players[bidder];
+    };
+
+    this.setBid = function(bid) {
+        this.bids[this.current_bidder] = parseInt(bid);
     };
 }
 
@@ -379,7 +419,7 @@ function hunt_table(game) {
     socket.emit('action', 'LIST');
 }
 
-function show_message(message) {
+function show_message(message, duration='3s') {
     var box = document.getElementById('infobox');
 
     if (box.classList.contains('animated')) {
@@ -395,6 +435,6 @@ function show_message(message) {
             box.classList.remove('animated');
         });
         box.classList.add('animated');
-        box.style.animation = "showinfo 3s ease-out 0.5s forwards";
+        box.style.animation = `showinfo ${duration} ease-out 0s forwards`;
     }
 }
