@@ -167,6 +167,18 @@ function cardCreateNode() {
   spotNode.appendChild(textNode);
   frontNode.appendChild(spotNode);
 
+
+  // Create and add the index (rank) to the bottom-right corner of the card.
+  spotNode2 = document.createElement("DIV");
+  spotNode2.style.transform = "rotateZ(180deg)"
+  spotNode2.className = "index_bottom";
+  textNode2 = document.createTextNode(indexStr);
+  spotNode2.appendChild(textNode2);
+  spotNode2.appendChild(document.createElement("BR"));
+  textNode2 = document.createTextNode(spotChar);
+  spotNode2.appendChild(textNode);
+  frontNode.appendChild(spotNode2);
+
   // Create and add spots based on card rank (Ace thru 10).
 
   spotNode = document.createElement("DIV");
