@@ -176,7 +176,7 @@ function cardCreateNode() {
   spotNode2.appendChild(textNode2);
   spotNode2.appendChild(document.createElement("BR"));
   textNode2 = document.createTextNode(spotChar);
-  spotNode2.appendChild(textNode);
+  spotNode2.appendChild(textNode2);
   frontNode.appendChild(spotNode2);
 
   // Create and add spots based on card rank (Ace thru 10).
