@@ -421,7 +421,7 @@ class KingTable:
     def end_round(self):
         """ Handles end of the round """
         if self.state is not GameState.ROUND_OVER:
-            return None
+            return (None, None)
 
         (winner, pts) = self.game.play_round(self.table)
 
@@ -434,7 +434,7 @@ class KingTable:
         else:
             self.state = GameState.RUNNING
 
-        return self.players[self.turn]
+        return (self.players[self.turn], pts)
 
     def end_hand(self):
         """ Handles end of the hand """

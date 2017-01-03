@@ -148,6 +148,8 @@ class Game:
     def __init__(self, server, game_player):
         self.hand = []
         self.players = []
+        self.scores = []
+        self.last_score = 0
         self.round = 0
         self.turn = ''
         self.table = []
@@ -237,16 +239,18 @@ class Game:
         self.table.append((self.turn, card))
         self.player.card_played()
 
-    def H_ENDROUND(self, winner):
+    def H_ENDROUND(self, winner, score):
         """ Handles the end of a round """
         self.table.clear()
+        self.last_score = int(score)
         self.player.end_round(winner)
 
-    def H_ENDHAND(self):
+    def H_ENDHAND(self, *score):
         """ Handles the end of a round """
+        self.scores.append(list(score))
         self.player.end_hand()
 
-    def H_GAMEOVER(self):
+    def H_GAMEOVER(self, *score):
         """ Handles the end of the game """
         self.is_over = True
 

@@ -39,10 +39,12 @@ def create_table(table_name):
 
 def close_table(table_name):
     """ Helper function for table removal """
-    # Remove table from tables
+    # Remove table from tables and capture its score
     table = tables.pop(table_name)
+    score = table.get_score()
     # Optionally I can have a different message for game aborted
-    status_publisher.send_string('%s GAMEOVER'%(table.name))
+    status_publisher.send_string('%s GAMEOVER %s'%(table.name, ' '.join(map(str, score))))
+
     # Remove players from quick access dict
     for player in table.players:
         players.pop(player, None)
@@ -123,6 +125,7 @@ def get_turn(usr_name, secret):
     return table.players[table.turn].name
 
 def inform_turn(table):
+    """Game Logic: Inform Turn is a helper function used to notify player's who's in the clock"""
     status_publisher.send_string('%s TURN %s'%(table.name, table.players[table.turn].name))
 
 def choose_game(usr_name, secret, game):
@@ -177,7 +180,7 @@ def get_bid(usr_name, secret, value):
     return 'ACK'
 
 def get_decision(usr_name, secret, decision):
-    """ Game Logic: Bid - Handles decision to take or not the winning bid """
+    """ Game Logic: Decide - Handles decision to take or not the winning bid """
     player = KingPlayer(usr_name, secret)
     table = players.get(player, None)
 
@@ -193,6 +196,7 @@ def get_decision(usr_name, secret, decision):
     return 'ACK'
 
 def get_trample(usr_name, secret, *trample):
+    """ Game Logic: Trample - Handles the choice of a trample suit for the positive """
     player = KingPlayer(usr_name, secret)
     table = players.get(player, None)
 
@@ -229,15 +233,16 @@ def play_card(usr_name, secret, card):
     status_publisher.send_string('%s PLAY %s'%(table.name, card))
 
     # Check for end of round
-    rnd_winner = table.end_round()
+    rnd_winner, score = table.end_round()
     if rnd_winner:
-        status_publisher.send_string('%s ENDROUND %s'%(table.name, rnd_winner.name))
+        status_publisher.send_string('%s ENDROUND %s %d'%(table.name, rnd_winner.name, score))
         # Check for end of hand
         if table.end_hand():
-            #TODO Inform scores on Hand Over (Partial Hand Score) and Game Over (Full Game Score)
-            status_publisher.send_string('%s ENDHAND'%(table.name))
+            score = table.score[-1]
+            status_publisher.send_string('%s ENDHAND %s'%(table.name, ' '.join(map(str, score))))
             # Check for a game over
             if table.end_game():
+                # Close table and inform scores (Full Game Score)
                 close_table(table.name)
             else:
                 # Sets up new hand
@@ -251,8 +256,9 @@ def play_card(usr_name, secret, card):
     return 'ACK'
 
 def cleanup(_tables):
+    """ Simple helper function for notifying users when server goes down """
     for tbl in _tables:
-        status_publisher.send_string('%s GAMEOVER'%(tbl))
+        status_publisher.send_string('%s GAMEOVER %s'%(tbl, ' '.join(map(str, tbl.get_score()))))
 
 ### ZMQ Initialization ###
 ctx = zmq.Context()
