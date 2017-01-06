@@ -5,17 +5,16 @@
 
 import sys
 import json
-import uuid
 import zmq
 
 class Server:
-    def __init__(self, usr):
-        self.usr = usr
+    def __init__(self, user_name):
+        self.usr = user_name
         self.channel = ''
         self.game_fn = None
         self.accept_matches = False
-        self.user_list = []
         self.games = dict()
+        self.user_list = []
 
         ### ZMQ Initialization ###
         ctx = zmq.Context()
@@ -34,40 +33,53 @@ class Server:
         """
         self.srv.send_string('AUTHORIZE %s %s'%(self.usr, pwd))
         ans = self.srv.recv_string()
+        if ans.startswith('ERROR'):
+            return False
 
-        if not ans.startswith('ERROR'):
-            if self.channel:
-                self.pubsrv.setsockopt_string(zmq.UNSUBSCRIBE, self.channel)
-            self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, ans)
-            self.channel = ans
-            self.game_fn = game_create_fn
-            self.accept_matches = accept_matches
+        # In case we have an old channel set in this client, unsubscribe to it
+        if self.channel:
+            self.pubsrv.setsockopt_string(zmq.UNSUBSCRIBE, self.channel)
 
-            return True
+        self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, ans)
+        self.channel = ans
+        self.game_fn = game_create_fn
+        self.accept_matches = accept_matches
+        if accept_matches:
+            self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, 'user-list-channel')
 
-        return False
-
-    def resubscribe(self, table):
-        self.pubsrv.setsockopt_string(zmq.UNSUBSCRIBE, '')
-        self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, table)
+        return True
 
     def get_user_list(self):
-        pass
+        msg = ''
+        while not msg or msg.startswith('ERROR'):
+            self.srv.send_string('LISTUSERS')
+            msg = self.srv.recv_string()
 
-    def poll_sub(self):
-        if self.pubsrv.poll(1):
+        self.user_list = None
+        while self.user_list is None:
+            self.poll_sub(300)
+
+        return self.user_list
+
+    def poll_sub(self, timeout=1):
+        if self.pubsrv.poll(timeout):
             topic, _, data = (self.pubsrv.recv_string()).partition(' ')
 
             if topic == 'user-list-channel':
                 self.user_list = data.split(' ')
             elif self.channel and topic == self.channel:
                 if self.game_fn and self.accept_matches:
-                    # I assume all messages are to check availability
-                    self.srv.send_string('AVAILABLE %s %s'%(self.usr, self.channel))
+                    if data.startswith('CONFIRM_AVAILABLE'):
+                        self.srv.send_string('AVAILABLE %s %s'%(self.usr, self.channel))
+                        self.srv.recv_string()
+                    else:
+                        self.join_table(data.split(' ')[1])
             else:
                 game = self.games.get(topic)
                 if game:
                     game.handle_msg(data)
+                    if game.is_over:
+                        self.games.pop(topic)
 
     def list_table(self):
         self.srv.send_string("LIST")
@@ -289,17 +301,17 @@ def run(user, passwd, accept_matches=False, player_creation_fn=lambda: GamePlaye
     if not accept_matches and not srv.hunt_table():
         return False
 
-    while True:
+    while accept_matches or len(srv.games):
         srv.poll_sub()
 
     return True
 
 if __name__ == "__main__":
     usr = ''
-    passwd = ''
+    password = ''
 
     if len(sys.argv) > 2:
         usr = sys.argv[1]
-        passwd = sys.argv[2]
+        password = sys.argv[2]
 
-    run(usr, passwd, GamePlayer())
+    run(usr, password)

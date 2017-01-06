@@ -367,10 +367,24 @@ def list_users():
 
     return 'ACK'
 
-def make_match(*others):
-    """ Make a match using players (must have size 4) either users or bots """
+def make_match(usr_name, channel, *others):
+    """ Make a match using players (others must have size 3) either users or bots """
     # The plan is to use only users that confirmed last availability
-    pass
+    usrs = []
+    for other in filter(lambda o: o in ACTIVE_USERS.list, others):
+        usr = users.get(other)
+        if usr:
+            usrs.append(usr)
+
+    if len(usrs) != 3:
+        return 'ERROR You must inform 3 other valid players'
+
+    table = create_table(usr_name, channel)
+    if not table.startswith('ERROR'):
+        for usr in usrs:
+            status_publisher.send_string('%s ASKJOIN %s'%(usr.channel, table))
+
+    return table
 
 ### ZMQ Initialization ###
 ctx = zmq.Context() 
