@@ -2,12 +2,45 @@
 import atexit
 import json
 import zmq
+import uuid
+import threading
 from king import *
 
 port = 5555
 
 tables = dict()
 players = dict()
+users = dict()
+
+class User:
+    def __init__(self, name, channel = ''):
+        self.name = name
+        self.channel = channel
+        self.players = dict()
+        self.authorized = False
+        self.is_bot = False
+
+    def authorize(self, password):
+        #TODO Truly validate before returning
+
+        if not self.authorized:
+            self.authorized = True
+            self.channel = str(uuid.uuid4())
+
+        return self.channel
+
+    def __hash__(self):
+        return hash((self.name, self.channel))
+
+    def __eq__(self, other):
+        return isinstance(other, User) and hash(self) == hash(other)
+
+    def add_player(self, player, table_name):
+        self.players[table_name] = player
+
+    def remove_player(self, table_name):
+        self.players.pop(table_name, None)
+
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 
@@ -29,31 +62,37 @@ def pool_req(handler_map, timeout=1000):
 
     return True
 
-def create_table(table_name):
+def create_table(usr_name, channel):
     """Manager Logic: TABLE - Creates a new table with the given parameters"""
-    if table_name in tables:
-        return 'ERROR Table already exists'
+    user = users.get(usr_name, None)
+    if not user or user.channel != channel:
+        return 'ERROR User not authorized'
+
+    table_name = str(uuid.uuid4())
 
     tables[table_name] = KingTable(table_name)
-    return 'ACK'
+    return table_name
 
 def close_table(table_name):
     """ Helper function for table removal """
     # Remove table from tables and capture its score
     table = tables.pop(table_name)
     score = table.get_score()
-    # Optionally I can have a different message for game aborted
+
+    # Notify all players that game is over
     status_publisher.send_string('%s GAMEOVER %s'%(table.name, ' '.join(map(str, score))))
 
     # Remove players from quick access dict
     for player in table.players:
-        players.pop(player, None)
+        players.pop(player)
+
+        # Remove player from owner user's list
+        users[player.name].players.pop(table_name)
 
 def list_tables():
     """Manager Logic: LIST - List all available tables"""
-    return json.dumps(list(map(lambda item: item[0], \
-                           filter(lambda item: len(item[1].players) < 4, \
-                           tables.items()))))
+    return json.dumps([{'name': t[0], 'players':[str(p) for p in t[1].players]}\
+                         for t in tables.items()])
 
 def leave_table(usr_name, secret):
     """Game Logic: LEAVE - Used to remove players from a table"""
@@ -61,20 +100,30 @@ def leave_table(usr_name, secret):
     table = players.pop(player, None)
 
     # Remove player from table and abort if it was running
-    if table and table.state is not GameState.NOT_STARTED:
-        close_table(table.name)
-    elif table:
-        table.players.remove(player)
+    if table:
+        # Send a message notifying players leaving table
+        status_publisher.send_string('%s LEAVE %s'%(table.name, player.name))
+
+        if table.state is GameState.NOT_STARTED:
+            table.players.remove(player)
+            users[player.name].players.pop(table.name)
+        else:
+            close_table(table.name)
     else:
         return 'ERROR Player not in table'
 
     return 'ACK'
 
-def join_table(usr_name, secret, table_name):
+def join_table(usr_name, channel, table_name):
     """Game Logic: JOIN - Used to add new players to an existing table"""
-    player = KingPlayer(usr_name, secret)
-    if player in players:
-        return 'ERROR Player already in table'
+    user = users.get(usr_name)
+    if not user or user.channel != channel:
+        return 'ERROR User not authorized'
+
+    if table_name in user.players:
+        return 'ERROR User already in table'
+
+    player = KingPlayer(usr_name, str(uuid.uuid4()))
 
     table = tables.get(table_name, None)
     if not table:
@@ -85,6 +134,7 @@ def join_table(usr_name, secret, table_name):
 
     # Quick access to game from player's info
     players[player] = table
+    user.add_player(player, table_name)
 
     # If game ready to start, handles main protocol
     if table.start():
@@ -94,7 +144,7 @@ def join_table(usr_name, secret, table_name):
         # Send info regarding the start of a hand
         start_hand(table)
 
-    return 'ACK'
+    return player.secret
 
 def start_hand(table):
     """ Messages used in hand start """
@@ -257,11 +307,73 @@ def play_card(usr_name, secret, card):
 
 def cleanup(_tables):
     """ Simple helper function for notifying users when server goes down """
-    for tbl in _tables:
+    for tbl in _tables.values():
         status_publisher.send_string('%s GAMEOVER %s'%(tbl, ' '.join(map(str, tbl.get_score()))))
 
+def auth_player(usr_name, password):
+    """ Basic auth protocol - Authenticates a player returning a secret to be used """
+    usr = users.get(usr_name, User(usr_name))
+    channel = usr.authorize(password)
+    if not channel:
+        return 'ERROR User does not exist or password is invalid'
+
+    users[usr_name] = usr
+
+    return channel
+
+class ActiveUsers:
+    def __init__(self):
+        self.list = []
+        self.listing = None
+
+    def run(self, fnOnEnd):
+        if not self.is_listening():
+            self.list.clear()
+            self.listing = threading.Timer(10.0, fnOnEnd)
+            self.listing.start()
+
+    def is_listening(self):
+        return self.listing and self.listing.is_alive()
+
+
+ACTIVE_USERS = ActiveUsers()
+
+def send_list():
+    """ Sends back list after collecting available users """
+    status_publisher.send_string('user-list-channel %s'%(' '.join(ACTIVE_USERS.list)))
+
+def confirm_available(usr_name, channel):
+    """ Basic user protocol - Confirms user is available to matches """
+    if not ACTIVE_USERS.is_listening():
+        return 'ERROR Timeout on response'
+
+    user = users.get(usr_name, None)
+    if not user or user.channel != channel:
+        return 'ERROR User not authorized'
+
+    ACTIVE_USERS.list.append(user.name)
+
+    return 'ACK'
+
+def list_users():
+    """ Basic user protocol - List available players """
+    if ACTIVE_USERS.is_listening():
+        return 'ERROR Listing in progress'
+
+    for usr in users.values():
+        status_publisher.send_string('%s CONFIRM_AVAILABLE'%(usr.channel))
+
+    ACTIVE_USERS.run(send_list)
+
+    return 'ACK'
+
+def make_match(*others):
+    """ Make a match using players (must have size 4) either users or bots """
+    # The plan is to use only users that confirmed last availability
+    pass
+
 ### ZMQ Initialization ###
-ctx = zmq.Context()
+ctx = zmq.Context() 
 
 action_server = ctx.socket(zmq.REP)
 action_server.bind("tcp://127.0.0.1:%d"%port)
@@ -275,6 +387,10 @@ poller.register(action_server, zmq.POLLIN)
 #This is used to hold all possible options for handling
 #   protocol messages
 handlers = {
+    'AUTHORIZE': auth_player,
+    'AVAILABLE': confirm_available,
+    'LISTUSERS': list_users,
+    'MATCH': make_match,
     'JOIN': join_table,
     'LEAVE': leave_table,
     'TABLE': create_table,

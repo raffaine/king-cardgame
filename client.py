@@ -11,8 +11,11 @@ import zmq
 class Server:
     def __init__(self, usr):
         self.usr = usr
-        self.table = ''
-        self.secret = str(uuid.uuid4())
+        self.channel = ''
+        self.game_fn = None
+        self.accept_matches = False
+        self.user_list = []
+        self.games = dict()
 
         ### ZMQ Initialization ###
         ctx = zmq.Context()
@@ -23,75 +26,91 @@ class Server:
         self.srv = ctx.socket(zmq.REQ)
         self.srv.connect("tcp://127.0.0.1:5555")
 
+    def authorize(self, pwd, game_create_fn, accept_matches=False):
+        """ Authorize client with the server and setup game creation
+            game_create_fn takes two parameters, this server and the table secret
+                must return a game
+            accept_matches is True if client accepts to join in new tables
+        """
+        self.srv.send_string('AUTHORIZE %s %s'%(self.usr, pwd))
+        ans = self.srv.recv_string()
+
+        if not ans.startswith('ERROR'):
+            if self.channel:
+                self.pubsrv.setsockopt_string(zmq.UNSUBSCRIBE, self.channel)
+            self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, ans)
+            self.channel = ans
+            self.game_fn = game_create_fn
+            self.accept_matches = accept_matches
+
+            return True
+
+        return False
+
     def resubscribe(self, table):
         self.pubsrv.setsockopt_string(zmq.UNSUBSCRIBE, '')
         self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, table)
 
-    def poll_sub(self, handler):
-        while self.pubsrv.poll(1):
-            _, _, data = (self.pubsrv.recv_string()).partition(' ')
-            handler(data)
+    def get_user_list(self):
+        pass
+
+    def poll_sub(self):
+        if self.pubsrv.poll(1):
+            topic, _, data = (self.pubsrv.recv_string()).partition(' ')
+
+            if topic == 'user-list-channel':
+                self.user_list = data.split(' ')
+            elif self.channel and topic == self.channel:
+                if self.game_fn and self.accept_matches:
+                    # I assume all messages are to check availability
+                    self.srv.send_string('AVAILABLE %s %s'%(self.usr, self.channel))
+            else:
+                game = self.games.get(topic)
+                if game:
+                    game.handle_msg(data)
 
     def list_table(self):
         self.srv.send_string("LIST")
         return self.srv.recv_string()
 
-    def create_table(self, name):
-        self.srv.send_string("TABLE %s"%(name))
+    def create_table(self):
+        self.srv.send_string("TABLE %s %s"%(self.usr, self.channel))
         return self.srv.recv_string()
 
     def join_table(self, name):
-        self.srv.send_string("JOIN %s %s %s"%(self.usr, self.secret, name))
-        return self.srv.recv_string()
+        self.pubsrv.setsockopt_string(zmq.SUBSCRIBE, name)
+        self.srv.send_string("JOIN %s %s %s"%(self.usr, self.channel, name))
+        ans = self.srv.recv_string()
+        if ans.startswith('ERROR'):
+            self.pubsrv.setsockopt_string(zmq.UNSUBSCRIBE, name)
+            return False
+
+        self.games[name] = self.game_fn(self, ans)
+        return True
 
     def hunt_table(self):
-        while not self.table:
+        while True:
             msg = self.list_table()
             if msg.startswith('ERROR'):
                 msg = '[]'
 
             tables = json.loads(msg)
 
-            while tables:
-                tmp = tables.pop()
-                self.resubscribe(tmp)
-
-                msg = self.join_table(tmp)
-                if not msg.startswith('ERROR'):
-                    self.table = tmp
+            for table in filter(lambda t: len(t['players']) < 4, tables):
+                if self.join_table(table['name']):
                     return True
 
-            msg = self.create_table(str(uuid.uuid4()))
+            msg = self.create_table()
             if msg.startswith('ERROR'):
-                self.resubscribe('')
                 return False
 
-    def get_turn(self):
-        self.srv.send_string("GETTURN %s %s"%(self.usr, self.secret))
-        return self.srv.recv_string()
+    def take_game_action(self, action, secret, *args):
+        """ Used to send an action to a table """
+        msg = "%s %s %s"%(action, self.usr, secret)
+        if len(args):
+            msg += ' %s'%(' '.join(args))
 
-    def get_hand(self):
-        self.srv.send_string("GETHAND %s %s"%(self.usr, self.secret))
-        return self.srv.recv_string()
-
-    def choose_game(self, game):
-        self.srv.send_string("GAME %s %s %s"%(self.usr, self.secret, game))
-        return self.srv.recv_string()
-
-    def bid(self, value):
-        self.srv.send_string("BID %s %s %d"%(self.usr, self.secret, value))
-        return self.srv.recv_string()
-
-    def decide(self, value):
-        self.srv.send_string("DECIDE %s %s %s"%(self.usr, self.secret, value))
-        return self.srv.recv_string()
-
-    def choose_trample(self, value):
-        self.srv.send_string("TRAMPLE %s %s %s"%(self.usr, self.secret, value))
-        return self.srv.recv_string()
-
-    def play_card(self, card):
-        self.srv.send_string("PLAY %s %s %s"%(self.usr, self.secret, card))
+        self.srv.send_string(msg)
         return self.srv.recv_string()
 
 class GamePlayer:
@@ -145,7 +164,7 @@ class GamePlayer:
 
 class Game:
     """ Keeps track of game information """
-    def __init__(self, server, game_player):
+    def __init__(self, server, secret, game_player):
         self.hand = []
         self.players = []
         self.scores = []
@@ -162,6 +181,7 @@ class Game:
 
         self.handlers = {k[len('H_'):]:v for k, v in Game.__dict__.items() if k.startswith('H_')}
         self.server = server
+        self.secret = secret
         self.player = game_player.set_game(self)
 
     def handle_msg(self, content):
@@ -181,13 +201,15 @@ class Game:
         if self.bidder == self.server.usr:
             msg = 'ERROR'
             while msg.startswith('ERROR'):
-                msg = self.server.bid(self.player.bid())
+                msg = self.server.take_game_action('BID', self.secret, str(self.player.bid()))
 
     def H_BIDS(self, value):
         """ Handles the bidding value info """
-        #TODO Fix this, a bid of 0 is valid but means forefeit
-        self.max_bid = int(value) # I can assume that server only inform valid bids
-        self.max_bidder = self.bidder
+        bid = int(value) # I can assume that server only inform valid bids
+        if not self.max_bidder or bid:
+            self.max_bid = bid
+            self.max_bidder = self.bidder
+
         self.player.inform_bid()
 
     def H_DECIDE(self, player):
@@ -195,26 +217,28 @@ class Game:
         if player == self.server.usr:
             msg = 'ERROR'
             while msg.startswith('ERROR'):
-                msg = self.server.decide(self.player.decide())
+                msg = self.server.take_game_action('DECIDE', self.secret, str(self.player.decide()))
 
     def H_CHOOSETRAMPLE(self, player):
         """ Handles the trample suit choice """
         if player == self.server.usr:
             msg = 'ERROR'
             while msg.startswith('ERROR'):
-                msg = self.server.choose_trample(self.player.choose_trample())
+                msg = self.server.take_game_action('TRAMPLE', self.secret,\
+                                                    self.player.choose_trample())
 
     def H_STARTHAND(self, start_player, *choices):
         """ Handles the start of a new hand """
         self.turn = start_player
-        self.hand = json.loads(self.server.get_hand())
+        self.hand = json.loads(self.server.take_game_action('GETHAND', self.secret))
         self.max_bid = 0
 
         # Use choice function if its user's turn
         if self.server.usr == start_player:
             msg = 'ERROR'
             while msg.startswith('ERROR'):
-                msg = self.server.choose_game(self.player.choose_game(list(choices)))
+                msg = self.server.take_game_action('GAME', self.secret,\
+                                                   self.player.choose_game(list(choices)))
 
     def H_GAME(self, game, *trample):
         """ Handles the selection of a game for the hand """
@@ -230,7 +254,7 @@ class Game:
             card = ''
             while msg.startswith('ERROR'):
                 card = self.player.play_card()
-                msg = self.server.play_card(card)
+                msg = self.server.take_game_action('PLAY', self.secret, card)
 
             self.hand.remove(card)
 
@@ -254,23 +278,28 @@ class Game:
         """ Handles the end of the game """
         self.is_over = True
 
-def run(user, game_player, table_decision_fn=lambda s: s.hunt_table()):
+
+def run(user, passwd, accept_matches=False, player_creation_fn=lambda: GamePlayer()):
     """ Helper function that establishes a table and run the game loop  """
     srv = Server(user)
-    if not table_decision_fn(srv):
-        print("Failed to join a table, exiting client")
+    if not srv.authorize(passwd, lambda s, n: Game(s, n, player_creation_fn()), accept_matches):
+        # Failure authorizing user
         return False
 
-    game = Game(srv, game_player)
-    while not game.is_over:
-        srv.poll_sub(game.handle_msg)
+    if not accept_matches and not srv.hunt_table():
+        return False
+
+    while True:
+        srv.poll_sub()
 
     return True
 
 if __name__ == "__main__":
     usr = ''
+    passwd = ''
 
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 2:
         usr = sys.argv[1]
+        passwd = sys.argv[2]
 
-    run(usr, GamePlayer())
+    run(usr, passwd, GamePlayer())

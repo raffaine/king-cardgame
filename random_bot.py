@@ -28,8 +28,10 @@ class RandomPlayer(client.GamePlayer):
 if __name__ == "__main__":
     usr = ''
 
-    if len(sys.argv) > 1:
-        usr = sys.argv[1]
+    if len(sys.argv) < 3:
+        print('Error, wrong usage.\n Usage: random_bot.py user password')
+
+    usr = sys.argv[1]
 
     random.seed()
-    client.run(usr, RandomPlayer())
+    client.run(usr, sys.argv[2], False, lambda: RandomPlayer())

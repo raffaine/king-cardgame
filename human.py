@@ -106,16 +106,11 @@ class HumanPlayer(client.GamePlayer):
         time.sleep(1)
         clear_screen()
 
-def choose_table(server):
-    """ Allows user to choose a game of his choice:
-        Create Table, Join Open, Single Player (spawns some bots) """
-    # TODO Implement user IO for selection
-    return server.hunt_table()
-
 if __name__ == "__main__":
 
-    if len(sys.argv) > 1:
-        USR_NAME = sys.argv[1]
+    if len(sys.argv) < 3:
+        print('Wrong usage: human.py USER PASSWORD')
+    USR_NAME = sys.argv[1]
 
-    client.run(USR_NAME, HumanPlayer(), choose_table)
+    client.run(USR_NAME, sys.argv[2], False, lambda: HumanPlayer())
     
