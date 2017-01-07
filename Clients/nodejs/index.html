@@ -12,6 +12,7 @@
         <!-- Header. -->
         <div id="header">
             <button id="console-btn">C</button>
+            <button id="authorize-btn">A</button>
             <button id="start-btn">S</button>
             <h2> King </h2>
         </div>
@@ -66,10 +67,17 @@
                 }
             });
 
-            $('#start-btn').on('click', function(evt){
+            $('#authorize-btn').on('click', function(evt){
                 if (cur_game === null) {
                     var name = prompt('Enter name:');
+                    var password = prompt('Password:');
                     cur_game = new Game(name);
+                    authorize(cur_game, password)
+                }
+            });
+
+            $('#start-btn').on('click', function(evt){
+                if (cur_game !== null && cur_game.channel) {
                     hunt_table(cur_game);
                 }
             });
