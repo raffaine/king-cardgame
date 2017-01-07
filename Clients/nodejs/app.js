@@ -8,6 +8,7 @@ var io = require('socket.io')(server);
 // Initialize the two main sockets (REQ/REP and PUB/SUB) for ZeroMQ
 // TODO: Error Handling on connection failure
 // TODO: Load URL from config file
+// TODO: Route the channel messages
 var action = zmq.createSocket('req');
 action.connect('tcp://127.0.0.1:5555');
 var info = zmq.createSocket('sub');
@@ -57,7 +58,6 @@ io.on('connection', function(client){
             // We temporarily join room so we don't miss any events on that table
             client.table = arr[3];
             client.user = arr[1];
-            client.secret = arr[2];
             client.joinning = true;
 
             client.join(client.table);
@@ -65,6 +65,9 @@ io.on('connection', function(client){
         }
         else if (arr.length > 2 && arr[0] === 'LEAVE') {
             client.leaving = true;
+        } else if (arr.length == 1 && arr[0] === 'LISTUSERS') {
+            // Route the user-list-channel messages
+            client.join('user-list-channel')
         }
 
         // Setup an event listener to handle the ZMQ server response
@@ -73,11 +76,13 @@ io.on('connection', function(client){
             // Special handling for JOIN message
             if (client.table && client.joinning) {
                 // Leave Socket.io room if answer was not ACK
-                if (response.toString() !== 'ACK') {
+                if (response.toString().startsWith('ERROR')) {
                     console.log(`${client.id} leaves ${client.table}`);
                     client.leave(client.table);
 
                     delete client.table;
+                } else {
+                    client.secret = response.toString()
                 }
 
                 delete client.joinning;
