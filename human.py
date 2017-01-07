@@ -53,10 +53,10 @@ class HumanPlayer(client.GamePlayer):
               " bid of ", self.game.max_bid, "? (y/N)")
         return input('>').lower() == 'y'
 
-    def choose_trample(self):
+    def choose_trump(self):
         if self.game.turn != USR_NAME:
             print("You win the auction with a bid of ", self.game.max_bid)
-        print("Choose a trample suit (S, H, D, C) or empty for no trample:")
+        print("Choose a trump suit (S, H, D, C) or empty for no trump:")
         res = 'I'
         while res and res not in "SHDC":
             res = input('>').capitalize()
@@ -66,15 +66,15 @@ class HumanPlayer(client.GamePlayer):
     def game_selected(self):
         clear_screen()
         print("A new hand started. The game will be", self.game.game)
-        if self.game.trample:
-            print("Trample suit is ", self.game.trample)
+        if self.game.trump:
+            print("Trump suit is ", self.game.trump)
         time.sleep(2)
 
     def play_card(self):
         clear_screen()
         print("It's your turn, choose card. (Game is %s)\n"%(self.game.game))
-        if self.game.trample:
-            print("Trample suit is ", self.game.trample)
+        if self.game.trump:
+            print("Trump suit is ", self.game.trump)
 
         print("Your Hand:", list(enumerate(self.game.hand)), "\n")
         print("Table is:", self.game.table)

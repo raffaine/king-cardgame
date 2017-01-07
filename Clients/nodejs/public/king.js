@@ -10,7 +10,7 @@ var TranslateChoices = {
     'S': 'Spades',
     'H': 'Hearts',
     'D': 'Diamonds',
-    '': 'No Trample',
+    '': 'No Trump',
     'COPAS': 'No Hearts',
     'VAZA': 'No Tricks', 
     'MULHERES': 'No Queens',
@@ -30,7 +30,7 @@ var GameStates = {
     WAITING_GAME: "WAITING FOR GAME",
     WAITING_BID: "WAITING FOR A BID",
     WAITING_DECISION: "WAITING FOR DECISION",
-    WAITING_TRAMPLE: "WAITING FOR TRAMPLE SUIT",
+    WAITING_TRUMP: "WAITING FOR TRUMP SUIT",
     WAITING_PLAY: "WAITING FOR PLAY",
     GAME_OVER: "GAME OVER"
 };
@@ -47,7 +47,8 @@ function Game(user) {
 
     this.table = new Table(user);
     this.user = user;
-    this.secret = 'whatever'; //TODO: I think it's obvious
+    this.channel = '';
+    this.secret = '';
     this.hand = new Hand(this);
     this.state = GameStates.NOT_STARTED;
     this.cur_game = '';
@@ -134,14 +135,14 @@ function Game(user) {
                         ['True', 'False'], 'DECIDE');
     };
 
-    // Show user UI so he can decide what is the trample suit
-    this.getTrample = function() {
-        //TODO: BUG ON No Trample choice, I need to find out what's up
+    // Show user UI so he can decide what is the trump suit
+    this.getTrump = function() {
+        //TODO: BUG ON No Trump choice, I need to find out what's up
         var choices = "CDHS".split('');
         choices.push('');
         this.createChoiceBox("You've got the choice!",
-                        "Choose one of the suits as the trample suit.",
-                        choices, 'TRAMPLE');
+                        "Choose one of the suits as the trump suit.",
+                        choices, 'TRUMP');
     };
 
     // Generic function used to Send some action to server
@@ -254,11 +255,11 @@ function Game(user) {
                     game.getDecision();
                 }
             },
-            'CHOOSETRAMPLE': function(game, player) {
+            'CHOOSETRUMP': function(game, player) {
                 // Setup screen if I'm the one that needs to decide
                 if (player[0] === game.user) {
-                    game.state = GameStates.WAITING_TRAMPLE;
-                    game.getTrample();
+                    game.state = GameStates.WAITING_TRUMP;
+                    game.getTrump();
                 }
                 //TODO: Bid is over, on else show a message stating what happened
                 // e.g (No bids were made, A is gonna choose)
@@ -391,6 +392,16 @@ function Hand(game) {
     }
 }
 
+function authorize(game, password) {
+        // I'm ignoring response here, since I don't really care
+        socket.once('response', function(msg){
+            if (!msg.startsWith('ERROR')) {
+                game.channel = msg;
+            }
+        });
+        socket.emit('action', `AUTHORIZE ${game.user} ${password}`);
+}
+
 function hunt_table(game) {
     var fnJoinAny = function(msg) {
         if (msg.startsWith('ERROR')) {
@@ -400,8 +411,12 @@ function hunt_table(game) {
 
         var tables = JSON.parse(msg);
         if (tables.length > 0) {
-            game.sendAction('JOIN', tables[0], function(msg) {
-                console.log(msg); //TODO: Once better control of animations, I can show_message here
+            game.secret = game.channel
+            game.sendAction('JOIN', tables[0]['name'], function(msg) {
+                if (!msg.startsWith('ERROR')) {
+                    show_message('Successfully joined a table. Waiting players.')
+                    game.secret = msg;
+                }
             });
         } else {
             // I'm ignoring response here, since I don't really care
@@ -409,9 +424,7 @@ function hunt_table(game) {
                 socket.once('response', fnJoinAny);
                 socket.emit('action', 'LIST');
             });
-            // TODO: I should really add support for server handling anonymous tables
-            // TODO: Alternative: http://stackoverflow.com/questions/105034/create-guid-uuid-in-javascript
-            socket.emit('action', 'TABLE jsTable');
+            socket.emit('action', `TABLE ${game.user} ${game.channel}`);
         }
     };
 

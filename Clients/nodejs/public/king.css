@@ -8,6 +8,11 @@
 }
 
 #start-btn { 
+    position: absolute; left: 5em; padding: 3px;
+    border-radius: 25%; 
+}
+
+#authorize-btn { 
     position: absolute; left: 3em; padding: 3px;
     border-radius: 25%; 
 }
