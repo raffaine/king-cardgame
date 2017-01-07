@@ -3,6 +3,7 @@ import sys
 import atexit
 import time
 import subprocess
+import client
 
 NUM_CLIENTS = 4
 SPAWN_RATE = 600 #PER MINUTE
@@ -40,8 +41,24 @@ if __name__ == "__main__":
         for c in range(NUM_CLIENTS):
             print("Starting Client", c)
             log_c = open("./logs/logC%d.log"%(c), "w")
-            CLIENTS.append(subprocess.Popen([PYTHON_EXEC, CLIENT, str(c)], stdout=log_c))
+            CLIENTS.append(subprocess.Popen([PYTHON_EXEC, CLIENT, str(c), str(c)], stdout=log_c))
             time.sleep(60./SPAWN_RATE)
+
+        # Registers a match maker
+        time.sleep(10) # Wait for clients to authorize
+        print("Starting match maker")
+        match_maker = client.Server('match_maker')
+        match_maker.authorize('secret', lambda s, n: None)
+        match_maker.pubsrv.setsockopt_string(client.zmq.SUBSCRIBE, 'user-list-channel')
+        candidates = match_maker.get_user_list()
+        print("List of candidates:", candidates)
+        if len(candidates) >= 4:
+            match_maker.srv.send_string('MATCH %s %s %s'%(match_maker.usr, match_maker.channel,
+                                                          ' '.join(candidates[:4])))
+            ans = match_maker.srv.recv_string()
+            if ans.startswith('ERROR'):
+                print(ans)
+                exit()
 
         while list(filter(lambda p: p.poll() is None, CLIENTS)):
             time.sleep(5)

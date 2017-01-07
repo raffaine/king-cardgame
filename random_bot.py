@@ -34,4 +34,4 @@ if __name__ == "__main__":
     usr = sys.argv[1]
 
     random.seed()
-    client.run(usr, sys.argv[2], False, lambda: RandomPlayer())
+    client.run(usr, sys.argv[2], True, lambda: RandomPlayer())

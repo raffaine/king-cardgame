@@ -24,10 +24,18 @@ class User:
         self.is_bot = False
 
     def authorize(self, password):
+        """ Authorizes a user an return a channel """
         client = MongoClient(MONGODB_URL, MONGODB_PORT)
         result = client.king.users.find_one({'name': self.name, 'password': password})
         if not result:
-            return None
+            # I'm not worried about real registration now, so if user does not exist, register!
+            if client.king.users.find_one({'name': self.name}):
+                return None # User already exists, which means password is wrong
+            result = client.king.users.insert_one({
+                'name': self.name, 'password': password
+            })
+            if not result or not result.inserted_id:
+                return None # User registration failed, better abort
 
         if not self.authorized:
             self.authorized = True
@@ -90,16 +98,17 @@ def close_table(table_name, reason='game over'):
 
     # Save table on DB (I'm not capturing the result because there is no recovery from failure here)
     client = MongoClient(MONGODB_URL, MONGODB_PORT)
-    client.king.games.insert_one({
+    game_summary = {
         'name': table.name,
         'players': [str(p) for p in table.players],
         'hand_scores': [{
             'game': table.players[turn_score[0]%4].games[turn_score[0]//4],
             'score': turn_score[1]
         } for turn_score in enumerate(table.score)],
-        'final_score': score,
+        'final_score': [s for s in table.get_score()],
         'date': datetime.utcnow()
-    })
+    }
+    client.king.games.insert_one(game_summary)
 
     for player in table.players:
         # Remove players from quick access dict
