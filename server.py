@@ -249,8 +249,8 @@ def get_bid(usr_name, secret, value):
     # Check for decision time
     if table.state is GameState.DECIDE_BID:
         status_publisher.send_string('%s DECIDE %s'%(table.name, table.players[table.turn].name))
-    elif table.state is GameState.CHOOSE_TRAMPLE:
-        status_publisher.send_string('%s CHOOSETRAMPLE %s'%(table.name, \
+    elif table.state is GameState.CHOOSE_TRUMP:
+        status_publisher.send_string('%s CHOOSETRUMP %s'%(table.name, \
                                                             table.players[table.turn].name))
     else:
         status_publisher.send_string('%s BID %s'%(table.name, table.players[table.bid_turn].name))
@@ -269,25 +269,25 @@ def get_decision(usr_name, secret, decision):
     if not bid_winner:
         return 'ERROR Invalid Action'
 
-    status_publisher.send_string('%s CHOOSETRAMPLE %s'%(table.name, bid_winner))
+    status_publisher.send_string('%s CHOOSETRUMP %s'%(table.name, bid_winner))
 
     return 'ACK'
 
-def get_trample(usr_name, secret, *trample):
-    """ Game Logic: Trample - Handles the choice of a trample suit for the positive """
+def get_trump(usr_name, secret, *trump):
+    """ Game Logic: Trump - Handles the choice of a trump suit for the positive """
     player = KingPlayer(usr_name, secret)
     table = g_players.get(player, None)
 
     if not table:
         return 'ERROR Invalid Player'
 
-    if not table.choose_trample(player, trample[0] if trample else ''):
+    if not table.choose_trump(player, trump[0] if trump else ''):
         return 'ERROR Invalid action'
 
     # Inform players the chosen game
     game_str = '%s GAME %s'%(table.name, str(Positiva()))
-    if trample:
-        game_str += ' %s'%(trample[0])
+    if trump:
+        game_str += ' %s'%(trump[0])
     status_publisher.send_string(game_str)
 
     # Inform the Turn
@@ -445,7 +445,7 @@ handlers = {
     'GAME': choose_game,
     'BID': get_bid,
     'DECIDE': get_decision,
-    'TRAMPLE': get_trample,
+    'TRUMP': get_trump,
     'PLAY': play_card
 }
 

@@ -160,16 +160,16 @@ class Positiva(BaseGame):
     """ English Positives
         Just like the base game, where each round score 25
         In adition we have:
-         - Trample Suit: Even when discarded, this suit takes the round """
+         - Trump Suit: Even when discarded, this suit takes the round """
 
-    def __init__(self, trample=''):
+    def __init__(self, trump=''):
         BaseGame.__init__(self)
-        self.trample = trample
+        self.trump = trump
         self.score = 25
 
-    # Check for Trample Suit and if found use it index for pivot suit
+    # Check for Trump Suit and if found use it index for pivot suit
     def play_round(self, table):
-        elem = list(filter(lambda x: x[-1] == self.trample, table))
+        elem = list(filter(lambda x: x[-1] == self.trump, table))
         index = table.index(elem[0]) if elem else 0
         return BaseGame.play_round(self, table, index)
 
@@ -226,7 +226,7 @@ class GameState(Enum):
     CHOOSE_HAND = 2
     BIDDING = 3
     DECIDE_BID = 4
-    CHOOSE_TRAMPLE = 5
+    CHOOSE_TRUMP = 5
     RUNNING = 6
     ROUND_OVER = 7
     HAND_OVER = 8
@@ -334,9 +334,9 @@ class KingTable:
             # Check to see if it's time to decide
             if self.bids.count(-1) >= 2:
                 # The auctioner always bids 0, if 2 more players forefeit is time to decide
-                # If all bidders forefeit, there is no choice to make, skip to trample choosing
+                # If all bidders forefeit, there is no choice to make, skip to trump choosing
                 self.state = GameState.DECIDE_BID if self.bids.count(-1) < 3 \
-                        else GameState.CHOOSE_TRAMPLE
+                        else GameState.CHOOSE_TRUMP
             else:
                 # In case there is at least two bidders, go back to lowest offer
                 self.bid_turn = min(filter(lambda x: x[1] > 0, \
@@ -357,23 +357,23 @@ class KingTable:
             self.bids = 4 * [-1]
             self.bids[self.turn] = 0
 
-        self.state = GameState.CHOOSE_TRAMPLE
+        self.state = GameState.CHOOSE_TRUMP
 
         # Return name of bid winner (it can be the auctioner if he declines)
         self.bid_turn = max(enumerate(self.bids), key=itemgetter(1))[0]
         return self.players[self.bid_turn].name
 
-    def choose_trample(self, player, *trample):
-        """ Handles the choice of a trample suit """
-        if self.state is not GameState.CHOOSE_TRAMPLE or \
+    def choose_trump(self, player, *trump):
+        """ Handles the choice of a trump suit """
+        if self.state is not GameState.CHOOSE_TRUMP or \
            player not in self.players or \
            player != self.players[self.bid_turn]:
             return False
 
         self.state = GameState.CHOOSE_HAND
-        res = self.start_hand(self.players[self.turn], str(Positiva()), *trample)
+        res = self.start_hand(self.players[self.turn], str(Positiva()), *trump)
         if not res:
-            self.state = GameState.CHOOSE_TRAMPLE
+            self.state = GameState.CHOOSE_TRUMP
 
         return res
 
@@ -389,7 +389,7 @@ class KingTable:
            (trampling and trampling[0] not in ['S', 'H', 'C', 'D']):
             return False
 
-        # Positives could come with Trample Suit
+        # Positives could come with Trump Suit
         # Start the game
         self.game = _HANDS[game]() if not trampling else \
                     _HANDS[game](trampling[0])
@@ -505,7 +505,7 @@ if __name__ == "__main__":
 
     print("Testing game evaluation: Positiva")
     assert Positiva().play_round(
-        ['5H', 'AS', 'AC', 'TH']) == (3, 25)  # no trample
+        ['5H', 'AS', 'AC', 'TH']) == (3, 25)  # no trump
     assert Positiva('H').play_round(
         ['5D', '6H', 'AD', 'TD']) == (1, 25)  # hearts
     assert Positiva('C').play_round(
@@ -514,7 +514,7 @@ if __name__ == "__main__":
         ['AD', '6D', 'KD', 'TD']) == (0, 25)  # diamonds
     assert Positiva('S').play_round(
         ['5D', '6S', 'AH', 'TC']) == (1, 25)  # spades
-    # trample but no trample
+    # trump but no trump
     assert Positiva('H').play_round(['5C', '2S', 'AC', 'TC']) == (2, 25)
 
     print("Testing simple hand constraint")

@@ -20,7 +20,7 @@ class RandomPlayer(client.GamePlayer):
         # Randomly accepts or refuses it
         return random.choice([True, False])
 
-    def choose_trample(self):
+    def choose_trump(self):
         # Chooses some random suit if player won the bidding
         options = list("SCHD") + ['']
         return random.choice(options)

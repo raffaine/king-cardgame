@@ -150,8 +150,8 @@ class GamePlayer:
         """ Callback to get decision if player is the auctioner """
         pass
 
-    def choose_trample(self):
-        """ Callback to get trample suit if player won the bid (or is the auctioner and declined)"""
+    def choose_trump(self):
+        """ Callback to get trump suit if player won the bid (or is the auctioner and declined)"""
         pass
 
     def game_selected(self):
@@ -189,7 +189,7 @@ class Game:
         self.bidder = ''
         self.max_bid = 0
         self.max_bidder = ''
-        self.trample = ''
+        self.trump = ''
 
         self.handlers = {k[len('H_'):]:v for k, v in Game.__dict__.items() if k.startswith('H_')}
         self.server = server
@@ -231,13 +231,13 @@ class Game:
             while msg.startswith('ERROR'):
                 msg = self.server.take_game_action('DECIDE', self.secret, str(self.player.decide()))
 
-    def H_CHOOSETRAMPLE(self, player):
-        """ Handles the trample suit choice """
+    def H_CHOOSETRUMP(self, player):
+        """ Handles the trump suit choice """
         if player == self.server.usr:
             msg = 'ERROR'
             while msg.startswith('ERROR'):
-                msg = self.server.take_game_action('TRAMPLE', self.secret,\
-                                                    self.player.choose_trample())
+                msg = self.server.take_game_action('TRUMP', self.secret,\
+                                                    self.player.choose_trump())
 
     def H_STARTHAND(self, start_player, *choices):
         """ Handles the start of a new hand """
@@ -252,10 +252,10 @@ class Game:
                 msg = self.server.take_game_action('GAME', self.secret,\
                                                    self.player.choose_game(list(choices)))
 
-    def H_GAME(self, game, *trample):
+    def H_GAME(self, game, *trump):
         """ Handles the selection of a game for the hand """
         self.game = game
-        self.trample = '' if not trample else trample[0]
+        self.trump = '' if not trump else trump[0]
         self.player.game_selected()
 
     def H_TURN(self, player):
