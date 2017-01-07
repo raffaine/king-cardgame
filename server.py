@@ -376,8 +376,8 @@ def make_match(usr_name, channel, *others):
         if usr:
             usrs.append(usr)
 
-    if len(usrs) != 3:
-        return 'ERROR You must inform 3 other valid players'
+    if len(usrs) not in range(3, 5):
+        return 'ERROR You must inform 3 or 4 other valid players'
 
     table = create_table(usr_name, channel)
     if not table.startswith('ERROR'):
