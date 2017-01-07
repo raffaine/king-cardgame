@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 import atexit
 import json
-import zmq
 import uuid
 import threading
+import zmq
+from pymongo import MongoClient
+from datetime import datetime
 from king import *
 
-port = 5555
+g_tables = dict()
+g_players = dict()
+g_users = dict()
 
-tables = dict()
-players = dict()
-users = dict()
+MONGODB_URL = 'localhost'
+MONGODB_PORT = 27017
 
 class User:
     def __init__(self, name, channel = ''):
@@ -21,7 +24,10 @@ class User:
         self.is_bot = False
 
     def authorize(self, password):
-        #TODO Truly validate before returning
+        client = MongoClient(MONGODB_URL, MONGODB_PORT)
+        result = client.king.users.find_one({'name': self.name, 'password': password})
+        if not result:
+            return None
 
         if not self.authorized:
             self.authorized = True
@@ -41,8 +47,8 @@ class User:
     def remove_player(self, table_name):
         self.players.pop(table_name, None)
 
-
-flatten = lambda l: [item for sublist in l for item in sublist]
+def flatten(l):
+    return [item for sublist in l for item in sublist]
 
 def pool_req(handler_map, timeout=1000):
     """Pool Request handler, just to keep it of with game logic"""
@@ -64,40 +70,53 @@ def pool_req(handler_map, timeout=1000):
 
 def create_table(usr_name, channel):
     """Manager Logic: TABLE - Creates a new table with the given parameters"""
-    user = users.get(usr_name, None)
+    user = g_users.get(usr_name, None)
     if not user or user.channel != channel:
         return 'ERROR User not authorized'
 
     table_name = str(uuid.uuid4())
 
-    tables[table_name] = KingTable(table_name)
+    g_tables[table_name] = KingTable(table_name)
     return table_name
 
-def close_table(table_name):
+def close_table(table_name, reason='game over'):
     """ Helper function for table removal """
     # Remove table from tables and capture its score
-    table = tables.pop(table_name)
+    table = g_tables.pop(table_name)
     score = table.get_score()
 
     # Notify all players that game is over
     status_publisher.send_string('%s GAMEOVER %s'%(table.name, ' '.join(map(str, score))))
 
-    # Remove players from quick access dict
+    # Save table on DB (I'm not capturing the result because there is no recovery from failure here)
+    client = MongoClient(MONGODB_URL, MONGODB_PORT)
+    client.king.games.insert_one({
+        'name': table.name,
+        'players': [str(p) for p in table.players],
+        'hand_scores': [{
+            'game': table.players[turn_score[0]%4].games[turn_score[0]//4],
+            'score': turn_score[1]
+        } for turn_score in enumerate(table.score)],
+        'final_score': score,
+        'date': datetime.utcnow()
+    })
+
     for player in table.players:
-        players.pop(player)
+        # Remove players from quick access dict
+        g_players.pop(player)
 
         # Remove player from owner user's list
-        users[player.name].players.pop(table_name)
+        g_users[player.name].players.pop(table_name)
 
 def list_tables():
     """Manager Logic: LIST - List all available tables"""
     return json.dumps([{'name': t[0], 'players':[str(p) for p in t[1].players]}\
-                         for t in tables.items()])
+                         for t in g_tables.items()])
 
 def leave_table(usr_name, secret):
     """Game Logic: LEAVE - Used to remove players from a table"""
     player = KingPlayer(usr_name, secret)
-    table = players.pop(player, None)
+    table = g_players.pop(player, None)
 
     # Remove player from table and abort if it was running
     if table:
@@ -106,7 +125,7 @@ def leave_table(usr_name, secret):
 
         if table.state is GameState.NOT_STARTED:
             table.players.remove(player)
-            users[player.name].players.pop(table.name)
+            g_users[player.name].players.pop(table.name)
         else:
             close_table(table.name)
     else:
@@ -116,7 +135,7 @@ def leave_table(usr_name, secret):
 
 def join_table(usr_name, channel, table_name):
     """Game Logic: JOIN - Used to add new players to an existing table"""
-    user = users.get(usr_name)
+    user = g_users.get(usr_name)
     if not user or user.channel != channel:
         return 'ERROR User not authorized'
 
@@ -125,7 +144,7 @@ def join_table(usr_name, channel, table_name):
 
     player = KingPlayer(usr_name, str(uuid.uuid4()))
 
-    table = tables.get(table_name, None)
+    table = g_tables.get(table_name, None)
     if not table:
         return 'ERROR Table does not exist'
 
@@ -133,7 +152,7 @@ def join_table(usr_name, channel, table_name):
         return 'ERROR Table is already full'
 
     # Quick access to game from player's info
-    players[player] = table
+    g_players[player] = table
     user.add_player(player, table_name)
 
     # If game ready to start, handles main protocol
@@ -157,7 +176,7 @@ def start_hand(table):
 def get_hand(usr_name, secret):
     """Game Logic: GetHand - Used to get a players hand"""
     player = KingPlayer(usr_name, secret)
-    table = players.get(player, None)
+    table = g_players.get(player, None)
 
     if not table:
         return 'ERROR Invalid Player'
@@ -167,7 +186,7 @@ def get_hand(usr_name, secret):
 def get_turn(usr_name, secret):
     """Game Logic: GetTurn - Used to get whose turn this is"""
     player = KingPlayer(usr_name, secret)
-    table = players.get(player, None)
+    table = g_players.get(player, None)
 
     if not table:
         return 'ERROR Invalid Player'
@@ -181,7 +200,7 @@ def inform_turn(table):
 def choose_game(usr_name, secret, game):
     """Game Logic: ChooseGame - Used to choose the game for the current hand"""
     player = KingPlayer(usr_name, secret)
-    table = players.get(player, None)
+    table = g_players.get(player, None)
 
     if not table:
         return 'ERROR Invalid Player'
@@ -205,7 +224,7 @@ def choose_game(usr_name, secret, game):
 def get_bid(usr_name, secret, value):
     """ Game Logic: Bid - Handles player bid """
     player = KingPlayer(usr_name, secret)
-    table = players.get(player, None)
+    table = g_players.get(player, None)
 
     if not table:
         return 'ERROR Invalid Player'
@@ -232,7 +251,7 @@ def get_bid(usr_name, secret, value):
 def get_decision(usr_name, secret, decision):
     """ Game Logic: Decide - Handles decision to take or not the winning bid """
     player = KingPlayer(usr_name, secret)
-    table = players.get(player, None)
+    table = g_players.get(player, None)
 
     if not table:
         return 'ERROR Invalid Player'
@@ -248,7 +267,7 @@ def get_decision(usr_name, secret, decision):
 def get_trample(usr_name, secret, *trample):
     """ Game Logic: Trample - Handles the choice of a trample suit for the positive """
     player = KingPlayer(usr_name, secret)
-    table = players.get(player, None)
+    table = g_players.get(player, None)
 
     if not table:
         return 'ERROR Invalid Player'
@@ -271,7 +290,7 @@ def get_trample(usr_name, secret, *trample):
 def play_card(usr_name, secret, card):
     """Game Logic: PlayCard - Handles logic for card playing and turn management"""
     player = KingPlayer(usr_name, secret)
-    table = players.get(player, None)
+    table = g_players.get(player, None)
 
     if not table:
         return 'ERROR Invalid Player'
@@ -312,12 +331,12 @@ def cleanup(_tables):
 
 def auth_player(usr_name, password):
     """ Basic auth protocol - Authenticates a player returning a secret to be used """
-    usr = users.get(usr_name, User(usr_name))
+    usr = g_users.get(usr_name, User(usr_name))
     channel = usr.authorize(password)
     if not channel:
         return 'ERROR User does not exist or password is invalid'
 
-    users[usr_name] = usr
+    g_users[usr_name] = usr
 
     return channel
 
@@ -347,7 +366,7 @@ def confirm_available(usr_name, channel):
     if not ACTIVE_USERS.is_listening():
         return 'ERROR Timeout on response'
 
-    user = users.get(usr_name, None)
+    user = g_users.get(usr_name, None)
     if not user or user.channel != channel:
         return 'ERROR User not authorized'
 
@@ -360,7 +379,7 @@ def list_users():
     if ACTIVE_USERS.is_listening():
         return 'ERROR Listing in progress'
 
-    for usr in users.values():
+    for usr in g_users.values():
         status_publisher.send_string('%s CONFIRM_AVAILABLE'%(usr.channel))
 
     ACTIVE_USERS.run(send_list)
@@ -372,7 +391,7 @@ def make_match(usr_name, channel, *others):
     # The plan is to use only users that confirmed last availability
     usrs = []
     for other in filter(lambda o: o in ACTIVE_USERS.list, others):
-        usr = users.get(other)
+        usr = g_users.get(other)
         if usr:
             usrs.append(usr)
 
@@ -387,13 +406,16 @@ def make_match(usr_name, channel, *others):
     return table
 
 ### ZMQ Initialization ###
+PORT = 5555
+ZMQ_REQREP_CONN = "tcp://127.0.0.1:%d"%PORT
+ZMQ_PUBSUB_CONN = "tcp://127.0.0.1:%d"%(PORT+1)
 ctx = zmq.Context() 
 
 action_server = ctx.socket(zmq.REP)
-action_server.bind("tcp://127.0.0.1:%d"%port)
+action_server.bind(ZMQ_REQREP_CONN)
 
 status_publisher = ctx.socket(zmq.PUB)
-status_publisher.bind("tcp://127.0.0.1:%d"%(port+1))
+status_publisher.bind(ZMQ_PUBSUB_CONN)
 
 poller = zmq.Poller()
 poller.register(action_server, zmq.POLLIN)
@@ -418,12 +440,12 @@ handlers = {
     'PLAY': play_card
 }
 
-atexit.register(cleanup, tables)
+atexit.register(cleanup, g_tables)
 
 try:
     # Main Game Loop
     while True:
         # Wait a few for some message and do it all again
-        pool_req(handlers, 100)
+        pool_req(handlers, 10)
 except KeyboardInterrupt:
     pass
