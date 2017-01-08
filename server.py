@@ -112,7 +112,7 @@ def close_table(table_name, reason='game over'):
 
     for player in table.players:
         # Remove players from quick access dict
-        g_players.pop(player)
+        g_players.pop(player, None)
 
         # Remove player from owner user's list
         g_users[player.name].players.pop(table_name)
