@@ -4,16 +4,14 @@ import json
 import uuid
 import threading
 import zmq
-from pymongo import MongoClient
 from datetime import datetime
+from kingdb import *
 from king import *
 
 g_tables = dict()
 g_players = dict()
 g_users = dict()
 
-MONGODB_URL = 'loxasmongo.westus.cloudapp.azure.com'
-MONGODB_PORT = 27017
 
 class User:
     def __init__(self, name, channel = ''):
@@ -25,19 +23,7 @@ class User:
 
     def authorize(self, password):
         """ Authorizes a user an return a channel """
-        client = MongoClient(MONGODB_URL, MONGODB_PORT)
-        result = client.king.users.find_one({'name': self.name, 'password': password})
-        if not result:
-            # I'm not worried about real registration now, so if user does not exist, register!
-            if client.king.users.find_one({'name': self.name}):
-                return None # User already exists, which means password is wrong
-            result = client.king.users.insert_one({
-                'name': self.name, 'password': password
-            })
-            if not result or not result.inserted_id:
-                return None # User registration failed, better abort
-
-        if not self.authorized:
+        if not self.authorized and authenticate_player(self.name, password):
             self.authorized = True
             self.channel = str(uuid.uuid4())
 
@@ -97,8 +83,7 @@ def close_table(table_name, reason='game over'):
     status_publisher.send_string('%s GAMEOVER %s'%(table.name, ' '.join(map(str, score))))
 
     # Save table on DB (I'm not capturing the result because there is no recovery from failure here)
-    client = MongoClient(MONGODB_URL, MONGODB_PORT)
-    game_summary = {
+    record_game({
         'name': table.name,
         'players': [str(p) for p in table.players],
         'hand_scores': [{
@@ -107,8 +92,7 @@ def close_table(table_name, reason='game over'):
         } for turn_score in enumerate(table.score)],
         'final_score': [s for s in table.get_score()],
         'date': datetime.utcnow()
-    }
-    client.king.games.insert_one(game_summary)
+    })
 
     for player in table.players:
         # Remove players from quick access dict
