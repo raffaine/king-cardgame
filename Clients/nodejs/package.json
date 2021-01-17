@@ -4,6 +4,7 @@
   "description": "Proxy socket.io working as client for ZeroMQ server",
   "main": "app.js",
   "scripts": {
+    "app": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -15,6 +16,6 @@
   "dependencies": {
     "express": "^4.14.0",
     "socket.io": "^1.7.2",
-    "zmq": "^2.15.3"
+    "zeromq": "^5.2.0"
   }
 }

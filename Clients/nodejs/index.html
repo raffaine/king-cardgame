@@ -19,13 +19,20 @@
         
         <!-- Table's area. -->
         <div id="table" class="playingField">
+            <div id="name1" class="textBox name">Right</div>
+            <div id="score1"  class="textBox">&nbsp;</div>
+            <div id="name2" class="textBox name">Top</div>
+            <div id="score2"  class="textBox">&nbsp;</div>
+            <div id="name3" class="textBox name">Left</div>
+            <div id="score3"  class="textBox">&nbsp;</div>
+
             <div id="tableCards" class="cardArea"></div>
         </div>
 
         <!-- Main player's area. -->
         <div id="player" class="playingField">
             <div class="textBox name">Player</div>
-            <div id="playerScore"  class="textBox">&nbsp;</div>
+            <div id="score0"  class="textBox">&nbsp;</div>
             <div id="playerCards"  class="cardArea"></div>
         </div>
 
@@ -100,7 +107,7 @@
                     transform: `translate(${middleTable.x}px, ${middleTable.y + 50}px)`
                 }
             }, {
-                name: `tableCard${PlayerPosition.LEFT}`,
+                name: `tableCard${PlayerPosition.RIGHT}`,
                 from: {
                     transform: `translate(${table.innerWidth() + 100}px, ${middleTable.y}px)`
                 },
@@ -116,7 +123,7 @@
                     transform: `translate(${middleTable.x}px, ${middleTable.y - 50}px)`
                 }
             }, {
-                name: `tableCard${PlayerPosition.RIGHT}`,
+                name: `tableCard${PlayerPosition.LEFT}`,
                 from: {
                     transform: `translate(-100px, ${middleTable.y}px)`
                 },

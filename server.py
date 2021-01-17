@@ -12,7 +12,7 @@ g_tables = dict()
 g_players = dict()
 g_users = dict()
 
-MONGODB_URL = 'localhost'
+MONGODB_URL = 'loxasmongo.westus.cloudapp.azure.com'
 MONGODB_PORT = 27017
 
 class User:

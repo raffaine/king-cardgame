@@ -1,5 +1,5 @@
 // Include required modules and initialize them
-var zmq = require('zmq');
+var zmq = require('zeromq');
 var express = require('express');
 var app = express();
 var server = require('http').createServer(app);
@@ -9,9 +9,9 @@ var io = require('socket.io')(server);
 // TODO: Error Handling on connection failure
 // TODO: Load URL from config file
 // TODO: Route the channel messages
-var action = zmq.createSocket('req');
+var action = zmq.socket('req');
 action.connect('tcp://127.0.0.1:5555');
-var info = zmq.createSocket('sub');
+var info = zmq.socket('sub');
 info.connect('tcp://127.0.0.1:5556');
 
 // Subscribe to everything since we handle filters with socket.io rooms

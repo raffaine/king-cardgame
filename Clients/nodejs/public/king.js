@@ -37,9 +37,9 @@ var GameStates = {
 
 var PlayerPosition = {
     BOTTOM: 0,
-    LEFT: 1,
+    RIGHT: 1,
     TOP: 2,
-    RIGHT: 3,
+    LEFT: 3,
     CAPACITY: 4
 };
 
@@ -163,27 +163,32 @@ function Game(user) {
             },
             'STARTHAND': function(game, params) {
                 //params[0] is starter, params[1:-1] is list of possible games as strings
-                //TODO: Handle ROUND_ENDING ...
                 //THE TIMEOUT IS TO FIX A RACE CONDITION IF YOU ARE THE LAST ONE TO JOIN
-                setTimeout( function() {
-                    // Attempt to get the player's hand
-                    game.sendAction('GETHAND', '', function(response) {
-                        if (!response.startsWith('ERROR')) {
-                            console.log(response);
-                            game.hand.setCards(JSON.parse(response));
-                        }
-                    });
-                }, 1000);
+                if (game.state === GameStates.ROUND_ENDING) {
+                    setTimeout(function() {
+                        game.info['STARTHAND'](game, params);
+                    }, 1000);
+                } else {
+                    setTimeout( function() {
+                        // Attempt to get the player's hand
+                        game.sendAction('GETHAND', '', function(response) {
+                            if (!response.startsWith('ERROR')) {
+                                console.log(response);
+                                game.hand.setCards(JSON.parse(response));
+                            }
+                        });
+                    }, 1000);
 
-                // Set the state of the game according to whom is the starter
-                game.table.setStarter(params[0]);
-                if(params[0] === game.user) {
-                    //game.state = GameStates.WAITING_GAME;
-                    game.chooseGame(params.slice(1));
+                    // Set the state of the game according to whom is the starter
+                    game.table.setStarter(params[0]);
+                    if(params[0] === game.user) {
+                        //game.state = GameStates.WAITING_GAME;
+                        game.chooseGame(params.slice(1));
 
-                } /*else {
-                    game.state = GameStates.PENDING_GAME;
-                }*/
+                    } /*else {
+                        game.state = GameStates.PENDING_GAME;
+                    }*/
+                }
             },
             'GAME': function(game, choice) {
                 //Receive info about what are the current rules
@@ -224,14 +229,20 @@ function Game(user) {
             'ENDROUND': function(game, winner) {;
                 game.state = GameStates.ROUND_ENDING;
                 setTimeout( function() {
-                    game.table.endRound(winner[0]);
+                    game.table.endRound(winner[0], parseInt(winner[1]));
                     game.state = GameStates.RUNNING;
                 }, 1500);
             },
-            'ENDHAND': function(game, empty) {
-                //TODO: I'm planning to return the hand score here
+            'ENDHAND': function(game, scores) {
+                if (game.state === GameStates.ROUND_ENDING) {
+                    setTimeout(function() {
+                        game.info['ENDHAND'](game, scores);
+                    }, 1000);
+                } else {
+                    game.table.endHand(scores);
+                }
             },
-            'GAMEOVER': function(game, empty) {
+            'GAMEOVER': function(game, score) {
                 //TODO: I'm planning to return the final score here
             },
             'BID': function(game, player) {
@@ -240,8 +251,14 @@ function Game(user) {
 
                 // Setup screen for bidding if user is player
                 if (player[0] === game.user) {
-                    game.state = GameStates.WAITING_BID;
-                    game.getBid();
+                    if (game.state === GameStates.ROUND_ENDING) {
+                        setTimeout(function() {
+                            game.info['BID'](game, player);
+                        }, 1000);
+                    } else {
+                        game.state = GameStates.WAITING_BID;
+                        game.getBid();
+                    }
                 }
             },
             'BIDS': function(game, value) {
@@ -251,15 +268,27 @@ function Game(user) {
             'DECIDE': function(game, player) {
                 // Setup screen if I'm the one that needs to decide
                 if (player[0] === game.user) {
-                    game.state = GameStates.WAITING_DECISION;
-                    game.getDecision();
+                    if (game.state === GameStates.ROUND_ENDING) {
+                        setTimeout(function() {
+                            game.info['DECIDE'](game, player);
+                        }, 1000);
+                    } else {
+                        game.state = GameStates.WAITING_DECISION;
+                        game.getDecision();
+                    }
                 }
             },
             'CHOOSETRUMP': function(game, player) {
                 // Setup screen if I'm the one that needs to decide
                 if (player[0] === game.user) {
-                    game.state = GameStates.WAITING_TRUMP;
-                    game.getTrump();
+                   if (game.state === GameStates.ROUND_ENDING) {
+                        setTimeout(function() {
+                            game.info['ENDHAND'](game, scores);
+                        }, 1000);
+                    } else {
+                        game.state = GameStates.WAITING_TRUMP;
+                        game.getTrump();
+                    }
                 }
                 //TODO: Bid is over, on else show a message stating what happened
                 // e.g (No bids were made, A is gonna choose)
@@ -278,9 +307,29 @@ function Game(user) {
     });
 }
 
+function setPlayerName(position, name) {
+    switch(position) {
+    case PlayerPosition.BOTTOM: 
+        $('#player .name').text(`You (${name})`);
+        break;
+    case PlayerPosition.TOP: 
+        $(`#name${position}`).text(`${name} (Top)`);
+        break;
+    case PlayerPosition.LEFT: 
+        $(`#name${position}`).text(`${name} (Left)`);
+        break;
+    case PlayerPosition.RIGHT: 
+        $(`#name${position}`).text(`${name} (Right)`);
+        break;
+    }
+}
+
 function Table(user) {
     this.cards = new Array;
     this.players = {};
+    this.hand_score = {};
+    this.total_score = {};
+    this.table_index = 0;
     this.bids = new Array;
     this.user = user;
     this.current_turn = 0;
@@ -290,14 +339,18 @@ function Table(user) {
     this.setPlayers = function(players) {
         // This must be rearranged so Current Player is always on
         // the bottom of the screen and next turn is counter clockwise
-        var ind = players.indexOf(this.user);
-        if (ind === -1) {
+        this.table_index = players.indexOf(this.user);
+        if (this.table_index === -1) {
             // This should never happen ... user is not part of the table
             return;
         }
         for(var i = PlayerPosition.BOTTOM; i < PlayerPosition.CAPACITY; i++ ) {
-            var pos = (ind + i) % PlayerPosition.CAPACITY;
-            this.players[players[pos]] = i;
+            var pos = (this.table_index + i) % PlayerPosition.CAPACITY;
+            var name = players[pos];
+            this.players[name] = i;
+            this.hand_score[name] = 0;
+            this.total_score[name] = 0;
+            setPlayerName(i, name);
         }
     };
 
@@ -319,11 +372,14 @@ function Table(user) {
         this.current_turn = (this.current_turn + 1) % PlayerPosition.CAPACITY;
     };
 
-    this.endRound = function(winner) {
+    this.endRound = function(winner, score) {
         this.cards = new Array;
         
         // Display a message to notify the round winner
         var msg = '';
+        this.hand_score[winner] += score;
+        $(`#score${this.players[winner]}`).text(`${this.hand_score[winner]} / ${this.total_score[winner]}`);
+
         if( winner === this.user) {
             msg = 'You take the round';
         } else {
@@ -337,6 +393,16 @@ function Table(user) {
         }
 
         this.setStarter(winner);
+    };
+
+    this.endHand = function(scores) {
+        for (var name in this.players) {
+            var pos = this.players[name];
+            var value = scores[(this.table_index + pos) % PlayerPosition.CAPACITY];
+            this.hand_score[name] = 0;
+            this.total_score[name] += parseInt(value);
+            $(`#score${pos}`).text(`${this.hand_score[name]} / ${this.total_score[name]}`);
+        }
     };
 
     this.setBidder = function(bidder) {
@@ -396,6 +462,7 @@ function authorize(game, password) {
         // I'm ignoring response here, since I don't really care
         socket.once('response', function(msg){
             if (!msg.startsWith('ERROR')) {
+                show_message('User is now authorized');
                 game.channel = msg;
             }
         });
