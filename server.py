@@ -148,6 +148,12 @@ def join_table(usr_name, channel, table_name):
     g_players[player] = table
     user.add_player(player, table_name)
 
+    t = threading.Timer(1.0, inform_table_start, [table, table_name])
+    t.start()
+
+    return player.secret
+
+def inform_table_start(table, table_name):
     # If game ready to start, handles main protocol
     if table.start():
         # Send message for players signaling game start, send also players list
@@ -155,8 +161,6 @@ def join_table(usr_name, channel, table_name):
                                                     ' '.join([s.name for s in table.players])))
         # Send info regarding the start of a hand
         start_hand(table)
-
-    return player.secret
 
 def start_hand(table):
     """ Messages used in hand start """
