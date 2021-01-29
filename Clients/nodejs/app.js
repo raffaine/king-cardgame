@@ -5,6 +5,9 @@ var app = express();
 var server = require('http').createServer(app);
 var io = require('socket.io')(server);
 
+// I'm having too many issues with scrambling messages back to clients
+var client_hands = {};
+
 // Initialize the two main sockets (REQ/REP and PUB/SUB) for ZeroMQ
 // TODO: Error Handling on connection failure
 // TODO: Load URL from config file
@@ -68,6 +71,9 @@ io.on('connection', function(client){
         } else if (arr.length == 1 && arr[0] === 'LISTUSERS') {
             // Route the user-list-channel messages
             client.join('user-list-channel')
+        } else if (arr[0] === 'GETHAND') {
+            // I'm tired and not 100% sure why messages are getting scrambled (It's like the callback returns twice the same message from the Q)
+            client.hand = ""
         }
 
         // Setup an event listener to handle the ZMQ server response
@@ -91,6 +97,11 @@ io.on('connection', function(client){
             else if (client.leaving) {
                 client.leave(client.table);
                 delete client.leaving;
+            }
+            // Give me a break
+            else if (client.hand === "") {
+                client_hands[client.id] = response.toString();
+                delete client.hand;
             }
 
             // Send the response back to client
