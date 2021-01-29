@@ -5,15 +5,10 @@ var app = express();
 var server = require('http').createServer(app);
 var io = require('socket.io')(server);
 
-// I'm having too many issues with scrambling messages back to clients
-var client_hands = {};
-
 // Initialize the two main sockets (REQ/REP and PUB/SUB) for ZeroMQ
 // TODO: Error Handling on connection failure
 // TODO: Load URL from config file
 // TODO: Route the channel messages
-var action = zmq.socket('req');
-action.connect('tcp://127.0.0.1:5555');
 var info = zmq.socket('sub');
 info.connect('tcp://127.0.0.1:5556');
 
@@ -30,26 +25,32 @@ info.on('message', function(topic, data) {
     io.to(args[0]).emit('info', args.slice(1).join(' '));
 });
 
+
 // Set up client specific behavior during handle of client connection
 io.on('connection', function(client){
     console.log(`Client ${client.id} connected ...`);
 
+    var server = zmq.socket('req');
+    server.connect('tcp://127.0.0.1:5555');
+    client.server = server;
+
     // Setup handler for client disconnection
     client.on('disconnect', function(){
-        if (client.table) {
+        if (client.table && client.server) {
             // Try to gracefuly leave the table on ZMQ server
-            action.once('response', function(response) {
+            client.server.once('response', function(response) {
                 if (response.toString() !== 'ACK') {
                     console.log('ERROR LEAVING TABLE ON DISCONNECTION!!!');
                 }
             });
-            action.send(`LEAVE ${client.user} ${client.secret}`);
+            client.server.send(`LEAVE ${client.user} ${client.secret}`);
         }
         console.log(`Client ${client.id} has disconnected.`);
     });
 
     // Handle action messages (REQ/REP)
     client.on('action', function(data) {
+
         // Here is where ZMQ and Socket.io talk with each other
         console.log(`${client.id} requested ${data}`);
 
@@ -71,19 +72,16 @@ io.on('connection', function(client){
         } else if (arr.length == 1 && arr[0] === 'LISTUSERS') {
             // Route the user-list-channel messages
             client.join('user-list-channel')
-        } else if (arr[0] === 'GETHAND') {
-            // I'm tired and not 100% sure why messages are getting scrambled (It's like the callback returns twice the same message from the Q)
-            client.hand = ""
         }
 
         // Setup an event listener to handle the ZMQ server response
-        action.once('message', function(response) {
+        client.server.once('message', function(response) {
             console.log(`Server response was ${response}`);
             // Special handling for JOIN message
             if (client.table && client.joinning) {
                 // Leave Socket.io room if answer was not ACK
                 if (response.toString().startsWith('ERROR')) {
-                    console.log(`${client.id} leaves ${client.table}`);
+                    console.log(`${client.id} failed to join or leaves ${client.table}`);
                     client.leave(client.table);
 
                     delete client.table;
@@ -98,18 +96,13 @@ io.on('connection', function(client){
                 client.leave(client.table);
                 delete client.leaving;
             }
-            // Give me a break
-            else if (client.hand === "") {
-                client_hands[client.id] = response.toString();
-                delete client.hand;
-            }
 
             // Send the response back to client
             client.emit('response', response.toString());
         });
 
         // Send the request to the ZMQ server
-        action.send(data);
+        client.server.send(data);
     });
 });
 
