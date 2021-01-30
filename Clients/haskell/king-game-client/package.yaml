@@ -1,0 +1,48 @@
+name:                king-game-client
+version:             0.1.0.0
+github:              "githubuser/king-game-client"
+license:             BSD3
+author:              "Julio Raffaine"
+maintainer:          "julio.loxas@gmail.com"
+copyright:           "2021 The Year with No COVID"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Client for my King Game, more on http://elloxas.blogspot.com
+
+dependencies:
+- base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+
+executables:
+  king-game-client-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - king-game-client
+
+tests:
+  king-game-client-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - king-game-client
