@@ -1,26 +1,80 @@
+var AllTranslateChoices = {
+    'pt-br': {
+        '0': 'Desiste',
+        '1': '1 Positiva',
+        '2': '2 Positivas',
+        '3': '3 Positivas',
+        '4': '4 Positivas',
+        '5': '5 Positivas',
+        'C': 'Paus',
+        'S': 'Espadas',
+        'H': 'Copas',
+        'D': 'Ouros',
+        '': 'Sem Trunfo',
+        'COPAS': 'Copas',
+        'VAZA': 'Vaza', 
+        'MULHERES': 'Mulheres',
+        'POSITIVA': 'Positiva',
+        'HOMENS': 'Homens',
+        'KING': 'King',
+        '2ULTIMAS': '2 Ultimas',
+        'True': 'Sim, aceito.',
+        'False': 'Não, eu escolho.'
+    },
+    'en-us': {
+        '0': 'Forefeit',
+        '1': '1 Trick',
+        '2': '2 Tricks',
+        '3': '3 Tricks',
+        '4': '4 Tricks',
+        '5': '5 Tricks',
+        'C': 'Clubs',
+        'S': 'Spades',
+        'H': 'Hearts',
+        'D': 'Diamonds',
+        '': 'No Trump',
+        'COPAS': 'No Hearts',
+        'VAZA': 'No Tricks', 
+        'MULHERES': 'No Queens',
+        'POSITIVA': 'Positive',
+        'HOMENS': 'No Jacks and Kings',
+        'KING': 'No King of Hearts',
+        '2ULTIMAS': 'No Last 2 Tricks',
+        'True': 'Yes, I accept',
+        'False': 'No, I will choose'
+    }
+};
 
-var TranslateChoices = {
-    '0': 'Forefeit',
-    '1': '1 Trick',
-    '2': '2 Tricks',
-    '3': '3 Tricks',
-    '4': '4 Tricks',
-    '5': '5 Tricks',
-    'C': 'Clubs',
-    'S': 'Spades',
-    'H': 'Hearts',
-    'D': 'Diamonds',
-    '': 'No Trump',
-    'COPAS': 'No Hearts',
-    'VAZA': 'No Tricks', 
-    'MULHERES': 'No Queens',
-    'POSITIVA': 'Positive',
-    'HOMENS': 'No Jacks and Kings',
-    'KING': 'No King of Hearts',
-    '2ULTIMAS': 'No Last 2 Tricks',
-    'True': 'Yes, I accept',
-    'False': 'No, I will choose'
+var TranslateChoices = AllTranslateChoices['pt-br'];
+
+var TranslatedMessages = {
+    'pt-br' : {
+        'new_hand' : ["Sua vez de escolher a Regra, qual o jogo?", "Estas são as opções disponíveis, clique na desejada."],
+        'get_bid' : ["Sua vez de fazer um lance, quantas positivas?", "TODO: Aqui entra a historia (A deu 3, coberto por B com 4)."],
+        'get_decision' : ["Temos uma oferta final, você aceita?", (max_bidder, max) => `${max_bidder} ofereceu ${max} positivas pela escolha.`],
+        'get_trump' : ["Você tem a escolha!", "Escolha um dos naipes como o naipe Trunfo."],
+        'game_start' : "Iniciando a Partida",
+        'hand_start' : (choice) => `A regra para a mão será ${choice}`,
+        'round_win' : ["Você venceu esta rodada.", (winner) => `${winner} venceu esta rodada.`],
+        'authorize' : "Usuário autenticado com sucesso.",
+        'join_succ' : "Usuário juntou-se a uma mesa, esperando demais jogadores para iniciar partida.",
+        'join_fail' : "Falha ao tentar juntar-se à mesa, possivelmente alguém chegou antes, tente novamente.",
+    },
+    'en-us' : {
+        'new_hand' : ["New Hand, what's the game?", "These are the choices, click the one you want to play."],
+        'get_bid' : ["You're the current man on, how much will you give?", "TODO: The best here would be a story about the bidding."],
+        'get_decision' : ["We have a winning bid, do you take it?", (max_bidder, max) => `${max_bidder} offered ${max} tricks for the choice.`],
+        'get_trump' : ["You've got the choice!", "Choose one of the suits as the trump suit."],
+        'game_start' : "The game has started",
+        'hand_start' : (choice) => `The game for this hand is ${choice}`,
+        'round_win' : ["You take the round.", (winner) => `${winner} takes the round.`],
+        'authorize' : "User is now authorized",
+        'join_succ' : "Successfully joined a table. Waiting players.",
+        'join_fail' : "Failed to Join a Table, possibly due to concurrent player, try again.",
+    },
 }
+
+var TranslateMessage = TranslatedMessages['pt-br'];
 
 var GameStates = {
     NOT_STARTED: "NOT STARTED",
@@ -100,9 +154,8 @@ function Game(user) {
 
     // Show user what hand options are available and get the choice
     this.chooseGame = function(choices) {
-        this.createChoiceBox("New Hand, what's the game?",
-                        "These are the choices, click the one you want to play.",
-                        choices, 'GAME');
+        var msg = TranslateMessage['new_hand'];
+        this.createChoiceBox( msg[0], msg[1], choices, 'GAME');
     };
 
     // Show user UI so he can select what is his bids
@@ -118,10 +171,9 @@ function Game(user) {
             choices.push(i.toString());
         }
 
+        var msg = TranslateMessage['get_bid'];
         //TODO: There is still a story to tell here
-        this.createChoiceBox("You're the current man on, how much will you give?",
-                        "The best here would be a story about the bidding.",
-                        choices, 'BID');
+        this.createChoiceBox(msg[0], msg[1], choices, 'BID');
     };
 
     // Show user UI so he can decide if he accepts or not the winning bid
@@ -130,9 +182,8 @@ function Game(user) {
         var max = Math.max(...this.table.bids);
         var max_bidder = this.table.players[this.table.bids.indexOf(max)];
         
-        this.createChoiceBox("We have a winning bid, do you take it?",
-                        `${max_bidder} offered ${max} tricks for the choice.`,
-                        ['True', 'False'], 'DECIDE');
+        var msg = TranslateMessage['get_decision'];
+        this.createChoiceBox(msg[0], msg[1](max_bidder, max), ['True', 'False'], 'DECIDE');
     };
 
     // Show user UI so he can decide what is the trump suit
@@ -140,9 +191,9 @@ function Game(user) {
         //TODO: BUG ON No Trump choice, I need to find out what's up
         var choices = "CDHS".split('');
         choices.push('');
-        this.createChoiceBox("You've got the choice!",
-                        "Choose one of the suits as the trump suit.",
-                        choices, 'TRUMP');
+        
+        var msg = TranslateMessage['get_trump'];
+        this.createChoiceBox(msg[0], msg[1], choices, 'TRUMP');
     };
 
     // Generic function used to Send some action to server
@@ -158,7 +209,7 @@ function Game(user) {
     // Define the set of information that can be received from the server
     this.info = {
             'START': function(game, players) {
-                show_message("The game has started");
+                show_message(TranslateMessage['game_start']);
                 game.table.setPlayers(players);
             },
             'STARTHAND': function(game, params) {
@@ -199,7 +250,7 @@ function Game(user) {
                 } else {
                     game.cur_game = choice[0];
                     game.state = GameStates.RUNNING;
-                    show_message("The game is " + TranslateChoices[choice[0]]);
+                    show_message(TranslateMessage['hand_start'](TranslateChoices[choice[0]]));
                 }
             },
             'TURN': function(game, player) {
@@ -310,16 +361,16 @@ function Game(user) {
 function setPlayerName(position, name) {
     switch(position) {
     case PlayerPosition.BOTTOM: 
-        $('#player .name').text(`You (${name})`);
+        $('#player .name').text(`Você (${name})`);
         break;
     case PlayerPosition.TOP: 
-        $(`#name${position}`).text(`${name} (Top)`);
+        $(`#name${position}`).text(`${name} (Topo)`);
         break;
     case PlayerPosition.LEFT: 
-        $(`#name${position}`).text(`${name} (Left)`);
+        $(`#name${position}`).text(`${name} (Esquerda)`);
         break;
     case PlayerPosition.RIGHT: 
-        $(`#name${position}`).text(`${name} (Right)`);
+        $(`#name${position}`).text(`${name} (Direita)`);
         break;
     }
 }
@@ -381,9 +432,9 @@ function Table(user) {
         $(`#score${this.players[winner]}`).text(`${this.hand_score[winner]} / ${this.total_score[winner]}`);
 
         if( winner === this.user) {
-            msg = 'You take the round';
+            msg = TranslateMessage['round_win'][0];
         } else {
-            msg = `${winner} takes the round`;
+            msg = TranslateMessage['round_win'][1](winner);
         }
         show_message(msg, '2s');
 
@@ -462,7 +513,7 @@ function authorize(game, password) {
         // I'm ignoring response here, since I don't really care
         socket.once('response', function(msg){
             if (!msg.startsWith('ERROR')) {
-                show_message('User is now authorized');
+                show_message(TranslateMessage['authorize']);
                 game.channel = msg;
             }
         });
@@ -472,7 +523,7 @@ function authorize(game, password) {
 function hunt_table(game) {
     var fnJoinAny = function(msg) {
         if (msg.startsWith('ERROR')) {
-            show_message("FAILED TO JOIN TABLE");
+            show_message(TranslateMessage['join_fail']);
             return;
         }
 
@@ -481,7 +532,7 @@ function hunt_table(game) {
             game.secret = game.channel
             game.sendAction('JOIN', tables[0]['name'], function(msg) {
                 if (!msg.startsWith('ERROR')) {
-                    show_message('Successfully joined a table. Waiting players.')
+                    show_message(TranslateMessage['join_succ'])
                     game.secret = msg;
                 }
             });
