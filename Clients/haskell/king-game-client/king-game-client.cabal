@@ -49,6 +49,8 @@ executable king-game-client-exe
     , zeromq4-haskell
     , bytestring
     , json
+    , mtl
+    , split
   default-language: Haskell2010
 
 test-suite king-game-client-test
