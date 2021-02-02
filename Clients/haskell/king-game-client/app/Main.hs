@@ -96,10 +96,14 @@ setPlayers game plrs = KingGame (Table tbl_name plrs) [] (player game) (secret g
           tbl_name = name table
 
 -- Sets the Current Hand Rule in the Game
-setHandRule :: KingGame -> String -> Either [KingRule] KingRule -> KingGame
-setHandRule game starter rule = KingGame table [] (player game) (secret game) starter_pos (Just $ KingHand rule [] [] starter_pos)
+setHandRule :: KingGame -> Maybe String -> Either [KingRule] KingRule -> KingGame
+setHandRule game (Just starter) rule = KingGame table (roundCards game) (player game) (secret game) starter_pos (Just $ KingHand rule [] [] starter_pos)
     where table = kingTable game
           starter_pos = fromJust (starter `elemIndex` (players table)) 
+
+setHandRule game Nothing rule = KingGame table (roundCards game) (player game) (secret game) (activeTurn game) (Just $ KingHand rule [] [] (roundTurn hand))
+    where table = kingTable game
+          (Just hand) = activeHand game
 
 -- Moves a Turn
 moveTurn :: KingGame -> String -> KingGame
@@ -116,44 +120,75 @@ type KingGameEvaluator z = State KingGame z
 
 -- What is the Action server Expects us to take (in the sense that we need to make it)
 data ExpectedAction = KChooseHand | KGetHand | KPlay | KBid | KDecide | KTrump | KWait | KLeave
+    deriving (Eq, Show)
 
 -- This takes a string given by the server and process it changing the game state and returning what is the expected action
-evaluateGame :: String -> KingGameEvaluator ExpectedAction
+evaluateGame :: String -> KingGameEvaluator [ExpectedAction]
 evaluateGame info = do
     game <- get
     case splitOn " " info of
-        [] -> return KWait
+        [] -> return [KWait]
         t:m:ms | m == "START" -> do
             put $ setPlayers game ms 
-            return KWait
+            return [KWait]
         t:m:s:ms | m == "STARTHAND" -> do
-            put $ setHandRule game s $ Left (map readRule ms)
-            return KGetHand
+            put $ setHandRule game (Just s) $ Left (map readRule ms)
+            if user (player game) == s
+            then return [KGetHand, KChooseHand]
+            else return [KGetHand]
+        t:m:ms | m == "GAME" -> do
+            put $ setHandRule game Nothing $ Right (readRule (concat ms))
+            return [KWait]
         t:m:ms | m == "TURN" -> do
             put $ moveTurn game $ concat ms
             if user (player game) `elem` ms
-            then return KPlay
-            else return KWait
-        otherwise -> return KLeave 
+            then return [KPlay]
+            else return [KWait]
+        otherwise -> return [KLeave] 
 
-data ActionData a = KGameOver | KAck | KError a | KHand a
+data ActionData a = KAck | KError a | KHand a
+    deriving (Eq, Show)
 
--- Given a Game and an ExpectedEaction, uses Server Socket to perform Action returning Bool for Game Over
-executeAction :: (Sender s, Receiver s) => KingGame -> ExpectedAction -> Socket z s -> ZMQ z (ActionData String)
-executeAction _ KWait _ = return KAck
-executeAction game act srv = do
+-- Given a Game and an ExpectedEaction, uses Server Socket to perform Action returning ActionData
+executeAction :: (Sender s, Receiver s) => Socket z s -> KingGame -> ExpectedAction -> ZMQ z (ActionData String)
+executeAction _   _  KWait = return KAck
+executeAction srv game act = do
     send srv [] $ getAction game act
     rsp <- receive srv
+    liftIO $ putStrLn $ "Action : " ++ show act
+    liftIO $ putStrLn $ show game
     case splitOn " " (BS.unpack rsp) of
-        e:ms | e == "ERROR" -> return (KError $ concat ms)
+        e:ms | e == "ERROR" -> return (KError $ intercalate " " ms)
         a:_  | a == "ACK" -> return KAck
-        m:ms | m == "GAMEOVER" -> return KGameOver
         cs -> return (KHand $ concat cs)
     where getAction g a = case a of
             KGetHand    -> mkPlayStr g "GETHAND" Nothing
             KChooseHand -> mkPlayStr g "GAME" $ Just $ show (chooseRule g)
+            KPlay       -> mkPlayStr g "PLAY" $ Just $ chooseCard g
+            KBid        -> mkPlayStr g "BID" $ Just $ chooseBid g
+            KDecide     -> mkPlayStr g "DECIDE" $ Just $ makeBidDecision g
+            KTrump      -> mkPlayStr g "TRUMP" $ Just $ chooseTrumpSuit g
             _           -> mkPlayStr g "LEAVE" Nothing
 
+
+-- Always chooses Hearts (for now)
+chooseTrumpSuit :: KingGame -> String
+chooseTrumpSuit _ = "H"
+
+-- Always refuses
+makeBidDecision :: KingGame -> String
+makeBidDecision _ = "False"
+
+-- Always forefeits
+chooseBid :: KingGame -> String
+chooseBid _ = "0"
+
+-- Not much to do as Default, otherwise it will try the same thing all the time
+-- Random requires something
+chooseCard :: KingGame -> String
+chooseCard (KingGame _ cards _ _ _ (Just (KingHand (Right rule) tbCards _ _ ))) = firstValid cards tbCards rule
+    where firstValid c cs r = head c
+chooseCard _ = "KH"
 
 chooseRule :: KingGame -> KingRule
 chooseRule game = case activeHand game of
@@ -195,6 +230,11 @@ joinTable srv player table = do
     secret <- receive srv
     return $ BS.unpack secret
 
+
+checkResult :: ActionData a -> Bool
+checkResult (KError _)  = False
+checkResult _           = True
+
 gameLoop :: Player -> String -> String -> String -> ZMQ z ()
 gameLoop player table srv_addr sub_addr = do
     -- Before Joining is important to subscribe to that Table's channel to not miss any message
@@ -213,18 +253,20 @@ gameLoop player table srv_addr sub_addr = do
             loop info srv game = do
                 msg <- receive info
                 liftIO $ putStrLn $ BS.unpack msg
-                let (act, game') = runState (evaluateGame (BS.unpack msg)) game in
+                let (acts, game') = runState (evaluateGame (BS.unpack msg)) game in
                     do
-                        result <- executeAction game' act srv 
+                    (res, srv, g) <- foldM (\(r, srv, game'') act -> do
+                        result <- executeAction srv game'' act
                         case result of
-                            KGameOver -> return ()
                             KError e -> do
                                 liftIO $ putStrLn $ "Server Returned Error: " ++ e
-                                return ()
+                                return (result, srv, game'')
                             KHand cs -> do
                                 liftIO $ putStrLn $ "Server returned cards: " ++ cs
-                                loop info srv $ setupCards game' (decodeJSON cs :: [String])
-                            otherwise -> loop info srv game'
+                                return (result, srv, setupCards game'' (decodeJSON cs :: [String]))
+                            otherwise -> return (result, srv, game'')) (KAck, srv, game') acts
+                    if checkResult res then loop info srv g
+                    else return ()
 
 
 -- Launchs an Agent with given username and password
