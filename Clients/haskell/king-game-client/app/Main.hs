@@ -20,7 +20,7 @@ import System.ZMQ4.Monadic
 data Player = Player
     { user :: String
     , channel :: String
-    }
+    } deriving (Eq, Show)
 
 -- Makes a String to Request Table Actions from the Server
 mkPlayerStr :: Player -> String
@@ -34,18 +34,18 @@ data Table = Table
 data KingRule = RVaza | RMulheres | RHomens | RKing | RCopas | R2Ultimas |
                 RPositiva | RPositivaH | RPositivaS | RPositivaD | RPositivaC
 
-strRule :: KingRule -> String
-strRule r = case r of
-    RVaza -> "VAZA"
-    RHomens -> "HOMENS"
-    RMulheres -> "MULHERES"
-    R2Ultimas -> "2ULTIMAS"
-    RCopas -> "COPAS"
-    RKing -> "KING"
-    _ -> "POSITIVA"
+instance Show KingRule where
+    show r = case r of
+        RVaza -> "VAZA"
+        RHomens -> "HOMENS"
+        RMulheres -> "MULHERES"
+        R2Ultimas -> "2ULTIMAS"
+        RCopas -> "COPAS"
+        RKing -> "KING"
+        _ -> "POSITIVA"
 
-mkRule :: String -> KingRule
-mkRule rule = case rule of 
+readRule :: String -> KingRule
+readRule rule = case rule of 
     m | m == "VAZA" -> RVaza
     m | m == "HOMENS" -> RHomens
     m | m == "MULHERES" -> RMulheres
@@ -58,9 +58,6 @@ mkRule rule = case rule of
     m | m == "S" -> RPositivaS
     m | m == "D" -> RPositivaD
 
-mkRules :: [String] -> [KingRule]
-mkRules = map mkRule
-
 type KingCard = String
 
 data KingHand = KingHand
@@ -68,7 +65,7 @@ data KingHand = KingHand
     , curRound  :: [KingCard]
     , handScore :: [[Int]]
     , roundTurn :: Int
-    }
+    } deriving (Show)
 
 -- Game State
 data KingGame = KingGame
@@ -78,12 +75,14 @@ data KingGame = KingGame
     , secret        :: String
     , activeTurn    :: Int
     , activeHand    :: Maybe KingHand
-    }
+    } deriving (Show)
 
 -- Simple Function to make the string requested on every play
-mkPlayStr :: KingGame -> String -> String -> BS.ByteString
-mkPlayStr game cmd args = BS.pack $ intercalate " " [cmd, usrname, usrsecret, args]
-    where usrname = user $ player game
+mkPlayStr :: KingGame -> String -> Maybe String -> BS.ByteString
+mkPlayStr game cmd m_args = BS.pack $ intercalate " " $ lst m_args
+    where lst Nothing     = [cmd, usrname, usrsecret]
+          lst (Just args) = [cmd, usrname, usrsecret, args]
+          usrname = user $ player game
           usrsecret = secret game
 
 -- Makes a new Game
@@ -102,36 +101,58 @@ setHandRule game starter rule = KingGame table [] (player game) (secret game) st
     where table = kingTable game
           starter_pos = fromJust (starter `elemIndex` (players table)) 
 
+-- Moves a Turn
+moveTurn :: KingGame -> String -> KingGame
+moveTurn game turn = KingGame table (roundCards game) (player game) (secret game) turn' (activeHand game)
+    where table = kingTable game
+          turn' = fromJust (turn `elemIndex` (players table))
+
+-- Setup the players Cards for the Hand
+setupCards :: KingGame -> [KingCard] -> KingGame
+setupCards game cards = KingGame (kingTable game) cards (player game) (secret game) (activeTurn game) (activeHand game)
+
 -- Defines our GameState Type 
 type KingGameEvaluator z = State KingGame z
 
 -- What is the Action server Expects us to take (in the sense that we need to make it)
-data ExpectedAction = KWaitStart | KWaitHand | KChooseHand | KGetHand | KPlay | KBid | KDecide | KTrump | KLeave
+data ExpectedAction = KChooseHand | KGetHand | KPlay | KBid | KDecide | KTrump | KWait | KLeave
 
 -- This takes a string given by the server and process it changing the game state and returning what is the expected action
 evaluateGame :: String -> KingGameEvaluator ExpectedAction
 evaluateGame info = do
     game <- get
     case splitOn " " info of
-        [] -> return KWaitStart
-        m:ms | m == "START" -> do
+        [] -> return KWait
+        t:m:ms | m == "START" -> do
             put $ setPlayers game ms 
-            return KWaitHand
-        m:s:ms | m == "STARTHAND" -> do
-            put $ setHandRule game s $ Left (mkRules ms)
+            return KWait
+        t:m:s:ms | m == "STARTHAND" -> do
+            put $ setHandRule game s $ Left (map readRule ms)
             return KGetHand
-        _ -> return KLeave 
+        t:m:ms | m == "TURN" -> do
+            put $ moveTurn game $ concat ms
+            if user (player game) `elem` ms
+            then return KPlay
+            else return KWait
+        otherwise -> return KLeave 
+
+data ActionData a = KGameOver | KAck | KError a | KHand a
 
 -- Given a Game and an ExpectedEaction, uses Server Socket to perform Action returning Bool for Game Over
-executeAction :: (Sender s, Receiver s) => KingGame -> ExpectedAction -> Socket z s -> ZMQ z Bool
+executeAction :: (Sender s, Receiver s) => KingGame -> ExpectedAction -> Socket z s -> ZMQ z (ActionData String)
+executeAction _ KWait _ = return KAck
 executeAction game act srv = do
     send srv [] $ getAction game act
     rsp <- receive srv
-    return True
+    case splitOn " " (BS.unpack rsp) of
+        e:ms | e == "ERROR" -> return (KError $ concat ms)
+        a:_  | a == "ACK" -> return KAck
+        m:ms | m == "GAMEOVER" -> return KGameOver
+        cs -> return (KHand $ concat cs)
     where getAction g a = case a of
-            KGetHand    -> mkPlayStr g "GETHAND" ""
-            KChooseHand -> mkPlayStr g "GAME" $ (strRule . chooseRule) g
-            _           -> mkPlayStr g "LEAVE" ""
+            KGetHand    -> mkPlayStr g "GETHAND" Nothing
+            KChooseHand -> mkPlayStr g "GAME" $ Just $ show (chooseRule g)
+            _           -> mkPlayStr g "LEAVE" Nothing
 
 
 chooseRule :: KingGame -> KingRule
@@ -191,11 +212,19 @@ gameLoop player table srv_addr sub_addr = do
         where
             loop info srv game = do
                 msg <- receive info
+                liftIO $ putStrLn $ BS.unpack msg
                 let (act, game') = runState (evaluateGame (BS.unpack msg)) game in
                     do
-                        over <- executeAction game' act srv 
-                        if over then return ()
-                        else loop info srv game'
+                        result <- executeAction game' act srv 
+                        case result of
+                            KGameOver -> return ()
+                            KError e -> do
+                                liftIO $ putStrLn $ "Server Returned Error: " ++ e
+                                return ()
+                            KHand cs -> do
+                                liftIO $ putStrLn $ "Server returned cards: " ++ cs
+                                loop info srv $ setupCards game' (decodeJSON cs :: [String])
+                            otherwise -> loop info srv game'
 
 
 -- Launchs an Agent with given username and password
