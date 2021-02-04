@@ -33,6 +33,7 @@ data Table = Table
 
 data KingRule = RVaza | RMulheres | RHomens | RKing | RCopas | R2Ultimas |
                 RPositiva | RPositivaH | RPositivaS | RPositivaD | RPositivaC
+    deriving Eq
 
 instance Show KingRule where
     show r = case r of
@@ -53,10 +54,10 @@ readRule rule = case rule of
     m | m == "COPAS" -> RCopas
     m | m == "KING" -> RKing
     m | m == "POSITIVA" -> RPositiva
-    m | m == "H" -> RPositivaH
-    m | m == "C" -> RPositivaC
-    m | m == "S" -> RPositivaS
-    m | m == "D" -> RPositivaD
+    m | m == "POSITIVAH" -> RPositivaH
+    m | m == "POSITIVAC" -> RPositivaC
+    m | m == "POSITIVAS" -> RPositivaS
+    m | m == "POSITIVAD" -> RPositivaD
 
 type KingCard = String
 
@@ -67,6 +68,22 @@ data KingHand = KingHand
     , roundTurn :: Int
     } deriving (Show)
 
+playRoundCard :: KingHand -> KingCard -> KingHand
+playRoundCard hand card = KingHand (handRule hand) round (handScore hand) (roundTurn hand)
+    where cards = curRound hand
+          round = cards ++ [card] -- Don't look at me, it's not about performance, it's about consistency with player order
+
+replaceNth :: Int -> Int -> [Int] -> [Int]
+replaceNth _ _ [] = []
+replaceNth n val (x:xs)
+    | n == 0    = val:xs
+    | otherwise = x:(replaceNth (n-1) val xs)
+
+endHandRound :: KingHand -> Int -> Int -> KingHand
+endHandRound hand winner score = KingHand (handRule hand) [] scores' winner
+    where scores' = scores ++ [replaceNth winner score [0, 0, 0, 0]]
+          scores  = handScore hand
+
 -- Game State
 data KingGame = KingGame
     { kingTable     :: Table
@@ -74,7 +91,7 @@ data KingGame = KingGame
     , player        :: Player
     , secret        :: String
     , activeTurn    :: Int
-    , activeHand    :: Maybe KingHand
+    , gameHands     :: [KingHand]
     } deriving (Show)
 
 -- Simple Function to make the string requested on every play
@@ -87,39 +104,69 @@ mkPlayStr game cmd m_args = BS.pack $ intercalate " " $ lst m_args
 
 -- Makes a new Game
 mkGame :: Player -> String -> String -> KingGame
-mkGame player table secret = KingGame (Table table []) [] player secret 0 Nothing
+mkGame player table secret = KingGame (Table table []) [] player secret 0 []
 
 -- Sets the Players in a Game
 setPlayers :: KingGame -> [String] -> KingGame
-setPlayers game plrs = KingGame (Table tbl_name plrs) [] (player game) (secret game) 0 Nothing
+setPlayers game plrs = KingGame (Table tbl_name plrs) [] (player game) (secret game) 0 []
     where table = kingTable game
           tbl_name = name table
 
 -- Sets the Current Hand Rule in the Game
-setHandRule :: KingGame -> Maybe String -> Either [KingRule] KingRule -> KingGame
-setHandRule game (Just starter) rule = KingGame table (roundCards game) (player game) (secret game) starter_pos (Just $ KingHand rule [] [] starter_pos)
-    where table = kingTable game
-          starter_pos = fromJust (starter `elemIndex` (players table)) 
+startHand :: KingGame -> String -> [KingRule] -> KingGame
+startHand game starter rules = KingGame table (roundCards game) (player game) (secret game) starter_pos hands'
+    where table       = kingTable game
+          starter_pos = fromJust (starter `elemIndex` (players table))
+          hands       = gameHands game
+          hands'      = (KingHand (Left rules) [] [] starter_pos) : hands
 
-setHandRule game Nothing rule = KingGame table (roundCards game) (player game) (secret game) (activeTurn game) (Just $ KingHand rule [] [] (roundTurn hand))
-    where table = kingTable game
-          (Just hand) = activeHand game
+setHandRule :: KingGame -> KingRule -> KingGame
+setHandRule game rule = KingGame table (roundCards game) (player game) (secret game) (activeTurn game) hands'
+    where table        = kingTable game
+          (hand:hands) = gameHands game
+          hands'       = (KingHand (Right rule) [] [] (roundTurn hand)) : hands
 
 -- Moves a Turn
 moveTurn :: KingGame -> String -> KingGame
-moveTurn game turn = KingGame table (roundCards game) (player game) (secret game) turn' (activeHand game)
+moveTurn game turn = KingGame table (roundCards game) (player game) (secret game) turn' (gameHands game)
     where table = kingTable game
           turn' = fromJust (turn `elemIndex` (players table))
 
 -- Setup the players Cards for the Hand
 setupCards :: KingGame -> [KingCard] -> KingGame
-setupCards game cards = KingGame (kingTable game) cards (player game) (secret game) (activeTurn game) (activeHand game)
+setupCards game cards = KingGame (kingTable game) cards (player game) (secret game) (activeTurn game) (gameHands game)
+
+removeFromList :: KingCard -> [KingCard] -> [KingCard]
+removeFromList c cs = case cs of
+        [] -> []
+        (e:es) | e == c -> es
+        (e:es) -> e:(removeFromList c es)
+
+-- Current turn Player plays card on table
+playCard :: KingGame -> KingCard -> KingGame
+playCard game card = KingGame table cards' (player game) (secret game) turn hands'
+    where table         = kingTable game
+          turn          = activeTurn game
+          nameCur       = (players table) !! turn
+          name          = user $ player game
+          (hand:hands)  = gameHands game
+          hands'        = (playRoundCard hand card) : hands
+          cards         = roundCards game
+          cards'        = if nameCur == name then removeFromList card cards else cards
+
+-- End of Round, clear played cards add winner's score
+endRound :: KingGame -> String -> Int -> KingGame
+endRound game winner score = KingGame table (roundCards game) (player game) (secret game) 0 hands'
+    where table        = kingTable game
+          wnr_pos      = fromJust (winner `elemIndex` (players table))
+          (hand:hands) = gameHands game
+          hands'       = (endHandRound hand wnr_pos score) : hands
 
 -- Defines our GameState Type 
 type KingGameEvaluator z = State KingGame z
 
 -- What is the Action server Expects us to take (in the sense that we need to make it)
-data ExpectedAction = KChooseHand | KGetHand | KPlay | KBid | KDecide | KTrump | KWait | KLeave
+data ExpectedAction = KChooseHand | KGetHand | KPlay | KBid | KDecide | KTrump | KWait | KLeave | KGameOver
     deriving (Eq, Show)
 
 -- This takes a string given by the server and process it changing the game state and returning what is the expected action
@@ -132,21 +179,50 @@ evaluateGame info = do
             put $ setPlayers game ms 
             return [KWait]
         t:m:s:ms | m == "STARTHAND" -> do
-            put $ setHandRule game (Just s) $ Left (map readRule ms)
+            put $ startHand game s $ map readRule ms
             if user (player game) == s
             then return [KGetHand, KChooseHand]
             else return [KGetHand]
         t:m:ms | m == "GAME" -> do
-            put $ setHandRule game Nothing $ Right (readRule (concat ms))
+            put $ setHandRule game $ readRule (concat ms)
             return [KWait]
         t:m:ms | m == "TURN" -> do
             put $ moveTurn game $ concat ms
             if user (player game) `elem` ms
             then return [KPlay]
             else return [KWait]
+        t:m:cs | m == "PLAY" -> do
+            put $ playCard game $ concat cs
+            return [KWait]
+        t:m:ms | m == "BIDS" -> do
+            -- put $ bidOffered game $ read $ concat cs
+            return [KWait]
+        t:m:ms | m == "BID" -> do
+            -- put $ setBidder game $ concat cs
+            if user (player game) `elem`ms
+            then return [KBid]
+            else return [KWait]
+        t:m:ms | m == "DECIDE" -> do
+            if user (player game) `elem`ms
+            then return [KDecide]
+            else return [KWait]
+        t:m:ms | m == "CHOOSETRUMP" -> do
+            if user (player game) `elem`ms
+            then return [KTrump]
+            else return [KWait]
+        t:m:w:scr | m == "ENDROUND" -> do
+            put $ endRound game w $ read $ concat scr
+            return [KWait]
+        t:m:scrs | m == "ENDHAND" -> do
+            -- This message is a good to know info but I have it already
+            -- put $ endHand game $ map read $ intercalate " " scrs
+            return [KWait]
+        t:m:scrs | m == "GAMEOVER" -> do
+            -- put $ endGame game $ map read $ intercalate " " scrs
+            return [KGameOver]
         otherwise -> return [KLeave] 
 
-data ActionData a = KAck | KError a | KHand a
+data ActionData a = KOver | KAck | KError a | KHand a
     deriving (Eq, Show)
 
 -- Given a Game and an ExpectedEaction, uses Server Socket to perform Action returning ActionData
@@ -183,17 +259,32 @@ makeBidDecision _ = "False"
 chooseBid :: KingGame -> String
 chooseBid _ = "0"
 
+compareSuit :: KingCard -> KingCard -> Bool
+compareSuit (_:s1:_) (_:s2:_) = s1 == s2
+
+getFilter :: [KingCard] -> KingRule -> [KingCard] -> (KingCard -> Bool)
+getFilter cs RKing (c:_) = \cur -> (compareSuit cur c) || (cur == "KH")
+getFilter _ _ (c:_) = compareSuit c
+getFilter _ r [] = if r `elem` [RCopas, RKing] then not . (compareSuit "KH") else \_ -> True
+
+firstValid :: KingRule -> [KingCard] -> [KingCard] -> KingCard
+firstValid rule table cards = case cards' of
+            (c:cs) -> c
+            []     -> head cards
+    where cards' = filter (getFilter cards rule table) cards
+
 -- Not much to do as Default, otherwise it will try the same thing all the time
--- Random requires something
+-- Even Random requires some logic to avoid an Invalid Action
 chooseCard :: KingGame -> String
-chooseCard (KingGame _ cards _ _ _ (Just (KingHand (Right rule) tbCards _ _ ))) = firstValid cards tbCards rule
-    where firstValid c cs r = head c
+chooseCard (KingGame _ cards _ _ _ ((KingHand (Right rule) tbCards _ _ ):_)) = firstValid rule tbCards cards
 chooseCard _ = "KH"
 
+-- Just Choose the First on the list
+-- This can also be used to obtain the current rule
 chooseRule :: KingGame -> KingRule
-chooseRule game = case activeHand game of
-   Just (KingHand (Left (r:_)) _ _ _) -> r
-   Just (KingHand (Right r) _ _ _) -> r
+chooseRule game = case gameHands game of
+   ((KingHand (Left (r:_)) _ _ _):_) -> r
+   ((KingHand (Right r) _ _ _):_) -> r
 
 -- Authorizes Given user using provided password
 -- Returns Player (TODO: Either String Player and deal with errors)
@@ -233,6 +324,7 @@ joinTable srv player table = do
 
 checkResult :: ActionData a -> Bool
 checkResult (KError _)  = False
+checkResult KOver       = False
 checkResult _           = True
 
 gameLoop :: Player -> String -> String -> String -> ZMQ z ()
