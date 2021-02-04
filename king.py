@@ -46,16 +46,16 @@ class BaseGame:
 
 class Vaza(BaseGame):
     """ English No Tricks
-    Just like the base game, but score is negative 25 each round you make
+    Just like the base game, but score is -20 each round you make
     """
 
     def __init__(self):
         BaseGame.__init__(self)
-        self.score = -25
+        self.score = -20
 
 class DuasUltimas(BaseGame):
     """English No Last 2 Tricks
-    Just like the base game, but last 2 rounds worth negative 90 points each
+    Just like the base game, but last 2 rounds worth -90 points each
     """
 
     def __init__(self):
