@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace WinStoreKing
+namespace KingCard
 {
     enum POSITIONS
     {
@@ -92,13 +92,10 @@ namespace WinStoreKing
             }
         }
 
-        public void PlayCard(string card, string player)
+        public void PlayCard(string card)
         {
-            // Must I check for player in array or assume is valid?
-            int pos = Array.FindIndex(players, e => e.Name == player);
-
             Card c = new Card(card);
-            switch ((POSITIONS)pos)
+            switch ((POSITIONS) turn)
             {
                 case POSITIONS.PLAYER:
                     c.Position = new Vector2(center.X,
@@ -125,35 +122,37 @@ namespace WinStoreKing
 
             // TODO: Here comes the animation!
             table.Add(c);
-            players[pos].PlayCard(card);
+            players[turn].PlayCard(card);
 
             turn = (turn + 1) % 4;
         }
 
         //TODO: Enhance this one
-        public void EndRound(string next_player, int[] score)
+        public void EndRound(string winner, int score)
         {
             table.Clear();
 
-            turn = Array.FindIndex(players, e => e.Name == next_player);
-
             for (int i = 0; i < players.Length; ++i)
-                players[i].LastScore = score[(player_ind + i) % 4];
+            {
+                if (players[i].Name == winner)
+                {
+                    players[i].LastScore = score;
+                    turn = i;
+                }
+                else
+                {
+                    players[i].LastScore = 0;
+                }
+                players[i].Score += players[i].LastScore;
+            }
         }
 
-        public void EndHand(int[] score, int[] total)
+        public void EndHand(int[] score)
         {
             dealer = (dealer + 1) % 4;
             turn = dealer;
 
-            scoreList.Add(score);
-
-            int pos = 0;
-            foreach (IPlayer p in players)
-            {
-                p.LastScore = 0;
-                p.Score = total[(player_ind + pos++) % 4];
-            }
+            scoreList.Append(score);
         }
 
         public void SetMouseOver(Point pos)

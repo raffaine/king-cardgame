@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace WinStoreKing
+namespace KingCard
 {
     class Player : IPlayer
     {
