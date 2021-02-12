@@ -13,8 +13,7 @@ packages:
     hackage: json-0.10@sha256:d9fc6b07ce92b8894825a17d2cf14799856767eb30c8bf55962baa579207d799,3210
 snapshots:
 - completed:
-    size: 563100
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/17/0.yaml
-    sha256: e93a85871577ea3423d5f3454b2b6bd37c2c2123c79faf511dfb64f5b49a9f8b
-  original:
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/17/0.yaml
+    size: 533451
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/9/0.yaml
+    sha256: 27f29b231b39ea68e967a7a4346b2693a49d77c50f41fc0c276e11189a538da7
+  original: lts-9.0
