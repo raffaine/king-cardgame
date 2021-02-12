@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace WinStoreKing
+namespace KingCard
 {
     class Card
     {
@@ -17,7 +17,7 @@ namespace WinStoreKing
         const int back_card_y = card_y_size * 4;
 
         // Well ... these ones I cannot made constants ... but they are!
-        static readonly public string[] values = { "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K" };
+        static readonly public string[] ranks = { "A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K" };
         static readonly public string[] suits = { "C", "D", "H", "S" };
 
         // Static Texture representing Deck ...
@@ -47,18 +47,18 @@ namespace WinStoreKing
         // Use empty value to define a back oriented card
         public Card(string value)
         {
-            card = value;
+            card = value.Trim('\"');
             position = new Vector2(0, 0);
             origin = new Vector2(card_x_size / 2, card_y_size / 2);
             angle = 0f;
             offset = new Vector2(0,0);
             //TODO: Check if its a valid combination of Value and suit
-            if (value.Length == 0)
+            if (card.Length != 2)
                 deck_pos = new Rectangle(back_card_x, back_card_y,
                                          card_x_size,card_y_size);
             else
-                deck_pos = new Rectangle(card_x_size * Array.IndexOf(values, value.Substring(0, value.Length - 1)),
-                                         card_y_size * Array.IndexOf(suits, value.Substring(value.Length - 1)),
+                deck_pos = new Rectangle(card_x_size * Array.IndexOf(ranks, card.Substring(0, 1)),
+                                         card_y_size * Array.IndexOf(suits, card.Substring(1)),
                                          card_x_size, card_y_size);
         }
 
@@ -101,8 +101,8 @@ namespace WinStoreKing
         {
             // First find the relative value of the card 
             // ((x+12)%13 is to rotate de Ace)
-            var val1 = (Array.IndexOf(values, c1.Substring(0, c1.Length - 1)) + 12) % 13;
-            var val2 = (Array.IndexOf(values, c2.Substring(0, c2.Length - 1)) + 12) % 13;
+            var val1 = (Array.IndexOf(ranks, c1.Substring(0, c1.Length - 1)) + 12) % 13;
+            var val2 = (Array.IndexOf(ranks, c2.Substring(0, c2.Length - 1)) + 12) % 13;
 
             // This *100 is to group the suits and then sort the values
             return (c1[c1.Length-1] - c2[c2.Length-1])*100 + (val1 - val2);
