@@ -81,6 +81,49 @@ data KingGame = KingGame
     , gameHands     :: [KingHand]
     } deriving (Show)
 
+data GameMonad a = GM (KingGame -> (a, KingGame))
+
+instance Monad GameMonad where
+    GM c1 >>= fc2   =  GM (\s0 -> let (r,s1) = c1 s0
+                                      GM c2 = fc2 r in
+                                      c2 s1)
+    return k        =  GM (\s -> (k,s))
+
+instance Functor GameMonad where
+    fmap f (GM c) = GM (\s0 -> let (r, s1) = c s0 in
+                                   (f r, s1))
+
+instance Applicative GameMonad where
+    pure a             = GM (\g -> (a, g))
+
+    GM t <*> GM c     = GM (\s0 -> let (r, s1) = c s0
+                                       (f, s2) = t s1 in
+                                       (f r, s2))
+
+ -- extracts the state from the monad
+readGameMonad :: GameMonad KingGame
+readGameMonad = GM (\g -> (g, g))
+
+getPlayerCards :: GameMonad [KingCard]
+getPlayerCards = do
+    g <- readGameMonad
+    return $ roundCards g
+
+getRoundCards :: GameMonad [KingCard]
+getRoundCards = do
+    g <- readGameMonad
+    case gameHands g of
+        [] -> return []
+        (x:xs) -> return $ curRound x
+
+ -- updates the state of the monad
+updateGameMonad :: (KingGame -> KingGame) -> GameMonad ()  -- alters the state
+updateGameMonad f =  GM (\g -> ((), f g))
+
+-- run a computation in the GameMonad
+runGameMonad :: KingGame -> GameMonad a -> (a, KingGame)
+runGameMonad s0 (GM c) =  c s0
+
 ------------- TypeClass used for Applications and The Main Game Loop --------------
 
 class KingPlayer a where
@@ -261,6 +304,7 @@ evaluateMessage srv game agent info = do
             case cards of
                 (KHand cs) -> do
                                 when (user (player game) == s) (do 
+                                    -- This tricky fmap . fmap is so I can use show inside the Maybe that will be returned by chooseRule
                                     ans <- requestAgentAction srv game'' agent "GAME" ((fmap . fmap) show . chooseRule)
                                     when (ans) (do
                                         executeAction srv $ mkPlayStr game'' "LEAVE" Nothing
