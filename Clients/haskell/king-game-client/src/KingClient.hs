@@ -120,7 +120,9 @@ runGame srv_addr sub_addr agent = runZMQ $ do
             loop info srv game = do
                 msg <- receive info
                 liftIO $ putStrLn $ BS.unpack msg
+                liftIO $ putStrLn $ show game
                 game' <- evaluateMessage srv game agent (BS.unpack msg)
+                liftIO $ putStrLn $ show game'
                 case game' of
                     (Just g) -> loop info srv g
                     Nothing  -> return ()
@@ -236,12 +238,12 @@ executeAction srv action = do
         a:_  | a == "ACK" -> return KAck
         cs -> return (KHand $ concat cs)
 
-requestAgentAction :: (KingPlayer a, Show b, Sender s, Receiver s) => Socket z s -> KingGame -> a -> String -> (a -> KingGame -> Maybe b) -> ZMQ z Bool
+requestAgentAction :: (KingPlayer a, Sender s, Receiver s) => Socket z s -> KingGame -> a -> String -> (a -> KingGame -> Maybe String) -> ZMQ z Bool
 requestAgentAction srv game agent act_name action = loopRequest $ action agent game
     where 
         loopRequest Nothing = return False
         loopRequest (Just item) = do
-            rsp <- executeAction srv $ mkPlayStr game act_name $ Just $ show $ item
+            rsp <- executeAction srv $ mkPlayStr game act_name $ Just item
             case rsp of
                 KAck -> return True
                 otherwise -> loopRequest $ action agent game
@@ -259,7 +261,7 @@ evaluateMessage srv game agent info = do
             case cards of
                 (KHand cs) -> do
                                 when (user (player game) == s) (do 
-                                    ans <- requestAgentAction srv game'' agent "GAME" chooseRule
+                                    ans <- requestAgentAction srv game'' agent "GAME" ((fmap . fmap) show . chooseRule)
                                     when (ans) (do
                                         executeAction srv $ mkPlayStr game'' "LEAVE" Nothing
                                         return ())
@@ -267,6 +269,8 @@ evaluateMessage srv game agent info = do
                                 return $ Just game''
                             where   game'' = setupCards game' (decodeJSON cs :: [String])
                 otherwise -> return Nothing
+        t:m:ms | m == "GAME" -> do
+            return $ Just $ setHandRule game $ readRule (concat ms)
         t:m:ms | m == "TURN" -> do
             let game' = moveTurn game $ concat ms
             when (user (player game) `elem` ms) (do
@@ -285,7 +289,7 @@ evaluateMessage srv game agent info = do
             -- let game'= setBidder game $ concat cs
             let game' = game
             when (user (player game) `elem` ms) (do
-                ans <- requestAgentAction srv game' agent "BID" chooseBid
+                ans <- requestAgentAction srv game' agent "BID" ((fmap . fmap) show . chooseBid)
                 when (ans) (do
                     executeAction srv $ mkPlayStr game' "LEAVE" Nothing
                     return ())
@@ -295,7 +299,7 @@ evaluateMessage srv game agent info = do
             -- let game'= setDecider game $ concat cs
             let game' = game
             when (user (player game) `elem` ms) (do
-                ans <- requestAgentAction srv game' agent "DECIDE" chooseDecision
+                ans <- requestAgentAction srv game' agent "DECIDE" ((fmap . fmap) show . chooseDecision)
                 when (ans) (do
                     executeAction srv $ mkPlayStr game' "LEAVE" Nothing
                     return ())
@@ -305,7 +309,7 @@ evaluateMessage srv game agent info = do
             -- let game'= setTrumpChooser game $ concat cs
             let game' = game
             when (user (player game) `elem` ms) (do
-                ans <- requestAgentAction srv game' agent "TRUMP" chooseTrumpSuit
+                ans <- requestAgentAction srv game' agent "TRUMP" ((fmap . fmap) show . chooseTrumpSuit)
                 when (ans) (do
                     executeAction srv $ mkPlayStr game' "LEAVE" Nothing
                     return ())
