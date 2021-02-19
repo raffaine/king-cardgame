@@ -2,25 +2,134 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module KingClient
-    ( KingPlayer (..)
+    ( Player (..)
     , KingGame (..)
     , KingTable (..)
     , KingHand (..)
     , KingRule (..)
     , KingCard
     , KingSuit
-    , runGame
+    , KingGameS
+    , mkGame
+    , mkPlayStr
+    , updateGame
+    , startGame
+    , executeActionS
+    , ExpectedAction (..)
+    , ActionResponse (..)
     ) where
 
 import Data.Maybe
 import Data.List
 import Data.List.Split
 import Control.Monad
+import Control.Monad.State
 
 import Text.JSON.Generic
 import qualified Data.ByteString.Char8 as BS
 
 import System.ZMQ4.Monadic
+
+data ExpectedAction = KWait | KGetHand | KRule | KPlay | KBid | KDecide | KTrump | KOver String
+
+type KingGameS z = StateT KingGame (ZMQ z)
+
+evaluateMessageS :: (Sender s, Receiver s) => Socket z s -> String -> KingGameS z ExpectedAction
+evaluateMessageS _   []   = pure KWait
+evaluateMessageS srv info = do
+    game <- get
+    case splitOn " " info of
+        t:m:ms | m == "START" -> do
+            put $ setPlayers game ms
+            return KWait
+        t:m:s:ms | m == "STARTHAND" -> do
+            let game' = startHand game s $ map readRule ms
+            lift $ send srv [] $ mkPlayStr game' "GETHAND" Nothing
+            -- I'm not dealing with errors here, it's not hard, I just need to check for the pattern
+            cards <- lift $ receive srv
+            put $ setupCards game' (decodeJSON (BS.unpack cards) :: [String])
+            if user (player game') == s
+                then return KRule
+                else return KWait
+        t:m:ms | m == "GAME" -> do
+            put $ setHandRule game $ readRule (concat ms)
+            return KWait
+        t:m:ms | m == "TURN" -> do
+            put $ moveTurn game $ concat ms
+            if user (player game) `elem` ms
+                then return KPlay
+                else return KWait
+        t:m:cs | m == "PLAY" -> do
+            put $ playCard game $ concat cs
+            return KWait
+        t:m:ms | m == "BIDS" -> do
+            -- put $ bidOffered game $ read $ concat cs
+            return KWait
+        t:m:ms | m == "BID" -> do
+            -- put $ setBidder game $ concat cs
+            if user (player game) `elem` ms
+                then return KBid
+                else return KWait
+        t:m:ms | m == "DECIDE" -> do
+            -- put $ setDecider game $ concat cs
+            if user (player game) `elem` ms
+                then return KDecide
+                else return KWait
+        t:m:ms | m == "CHOOSETRUMP" -> do
+            -- put $ setTrumpChooser game $ concat cs
+            if user (player game) `elem` ms
+                then return KTrump
+                else return KWait
+        t:m:w:scr | m == "ENDROUND" -> do
+            put $ endRound game w $ read $ concat scr
+            return KWait
+        t:m:scrs | m == "ENDHAND" -> do
+            -- This message is a good to know info but I have it already
+            -- put $ endHand game $ map read $ intercalate " " scrs
+            return KWait
+        t:m:scrs | m == "GAMEOVER" -> do
+            return $ KOver $ intercalate " " scrs
+        otherwise -> do
+            return $ KOver $ "Unknown message"
+
+startGame :: (Sender s, Receiver s, Subscriber r) => Socket z s -> Socket z r -> String -> String -> KingGameS z Bool
+startGame srv sub usr pwd = StateT $ \_ -> do
+        player <- authorize srv usr pwd
+        table <- huntTable srv player
+
+        -- Before Joining is important to subscribe to that Table's channel to not miss any message
+        subscribe sub (BS.pack table)
+
+        secret <- joinTable srv player table
+        if isPrefixOf "ERROR" secret
+            then
+                return (False, mkGame player "" "")
+            else
+                return (True, mkGame player table secret)
+
+
+updateGame :: (Sender s, Receiver s, Receiver r) => Socket z s -> Socket z r -> Timeout -> KingGameS z ExpectedAction
+updateGame srv info timeout = do
+    let evt = [Sock info [In] Nothing ]
+    evts <- lift $ poll timeout evt
+    case evts of
+        [hs] | length hs == 0 -> return KWait
+        otherwise -> do
+            msg <- lift $ receive info
+            liftIO $ putStrLn $ BS.unpack msg
+            evaluateMessageS srv $ BS.unpack msg
+
+-- Given a Server Socket, perform Action returning ActionResponse
+data ActionResponse = KAck | KError String
+
+executeActionS :: (Sender s, Receiver s) => Socket z s -> BS.ByteString -> ZMQ z ActionResponse
+executeActionS srv action = do
+    send srv [] action
+    rsp <- receive srv
+    case splitOn " " (BS.unpack rsp) of
+        e:ms | e == "ERROR" -> return (KError $ intercalate " " ms)
+        a:_  | a == "ACK" -> return KAck
+        otherwise -> return $ KError $ "Unexpected Response: " ++ (BS.unpack rsp)
 
 --------- Data Types used in the game ---------------
 data Player = Player
@@ -81,97 +190,7 @@ data KingGame = KingGame
     , gameHands     :: [KingHand]
     } deriving (Show)
 
-data GameMonad a = GM (KingGame -> (a, KingGame))
-
-instance Monad GameMonad where
-    GM c1 >>= fc2   =  GM (\s0 -> let (r,s1) = c1 s0
-                                      GM c2 = fc2 r in
-                                      c2 s1)
-    return k        =  GM (\s -> (k,s))
-
-instance Functor GameMonad where
-    fmap f (GM c) = GM (\s0 -> let (r, s1) = c s0 in
-                                   (f r, s1))
-
-instance Applicative GameMonad where
-    pure a             = GM (\g -> (a, g))
-
-    GM t <*> GM c     = GM (\s0 -> let (r, s1) = c s0
-                                       (f, s2) = t s1 in
-                                       (f r, s2))
-
- -- extracts the state from the monad
-readGameMonad :: GameMonad KingGame
-readGameMonad = GM (\g -> (g, g))
-
-getPlayerCards :: GameMonad [KingCard]
-getPlayerCards = do
-    g <- readGameMonad
-    return $ roundCards g
-
-getRoundCards :: GameMonad [KingCard]
-getRoundCards = do
-    g <- readGameMonad
-    case gameHands g of
-        [] -> return []
-        (x:xs) -> return $ curRound x
-
- -- updates the state of the monad
-updateGameMonad :: (KingGame -> KingGame) -> GameMonad ()  -- alters the state
-updateGameMonad f =  GM (\g -> ((), f g))
-
--- run a computation in the GameMonad
-runGameMonad :: KingGame -> GameMonad a -> (a, KingGame)
-runGameMonad s0 (GM c) =  c s0
-
-------------- TypeClass used for Applications and The Main Game Loop --------------
-
-class KingPlayer a where
-    choosePlay :: a -> KingGame -> Maybe KingCard
-    chooseRule :: a -> KingGame -> Maybe KingRule
-    chooseTrumpSuit :: a -> KingGame -> Maybe KingSuit
-    chooseDecision :: a -> KingGame -> Maybe Bool
-    chooseBid :: a -> KingGame -> Maybe Int
-    getName :: a -> String
-    getPassword :: a -> String
-    wantCreateTable :: a -> Bool
-    wantJoinTable :: a -> KingTable -> Bool
-
-runGame :: (KingPlayer a) => String -> String -> a -> IO ()
-runGame srv_addr sub_addr agent = runZMQ $ do
-    srv <- socket Req
-    connect srv srv_addr
-
-    let username = getName agent
-    let password = getPassword agent
-
-    player <- authorize srv username password
-    table <- huntTable srv player
-
-    -- Before Joining is important to subscribe to that Table's channel to not miss any message
-    info <- socket Sub
-    connect info sub_addr
-    subscribe info (BS.pack table)
-
-    secret <- joinTable srv player table
-    if isPrefixOf "ERROR" secret 
-    then
-        return ()
-    else
-        loop info srv $ mkGame player table secret
-        where
-            loop info srv game = do
-                msg <- receive info
-                liftIO $ putStrLn $ BS.unpack msg
-                liftIO $ putStrLn $ show game
-                game' <- evaluateMessage srv game agent (BS.unpack msg)
-                liftIO $ putStrLn $ show game'
-                case game' of
-                    (Just g) -> loop info srv g
-                    Nothing  -> return ()
-
 --------- Helper Functions ---------------
-
 replaceNth :: Int -> Int -> [Int] -> [Int]
 replaceNth _ _ [] = []
 replaceNth n val (x:xs)
@@ -187,7 +206,6 @@ removeFromList c cs = case cs of
 -- Makes a String to Request Table Actions from the Server
 mkPlayerStr :: Player -> String
 mkPlayerStr p = (user p) ++ " " ++ (channel p)
-
 
 -------------- Hand Manipulation ----------------------------------
 playRoundCard :: KingHand -> KingCard -> KingHand
@@ -257,11 +275,6 @@ endRound game winner score = KingGame table (roundCards game) (player game) (sec
           (hand:hands) = gameHands game
           hands'       = (endHandRound hand wnr_pos score) : hands
 
-
------------------- Main Execution Routines ---------------------------------
-data ActionData = KAck | KError String | KHand String
-    deriving (Eq, Show)
-
 -- Giving a running game, returs a string that executes action CMD with arguments m_args if any
 mkPlayStr :: KingGame -> String -> Maybe String -> BS.ByteString
 mkPlayStr game cmd m_args = BS.pack $ intercalate " " $ lst m_args
@@ -269,105 +282,6 @@ mkPlayStr game cmd m_args = BS.pack $ intercalate " " $ lst m_args
           lst (Just args) = [cmd, usrname, usrsecret, args]
           usrname = user $ player game
           usrsecret = secret game
-
-
--- Given a Server Socket, perform Action returning ActionData
-executeAction :: (Sender s, Receiver s) => Socket z s -> BS.ByteString -> ZMQ z ActionData
-executeAction srv action = do
-    send srv [] action
-    rsp <- receive srv
-    case splitOn " " (BS.unpack rsp) of
-        e:ms | e == "ERROR" -> return (KError $ intercalate " " ms)
-        a:_  | a == "ACK" -> return KAck
-        cs -> return (KHand $ concat cs)
-
-requestAgentAction :: (KingPlayer a, Sender s, Receiver s) => Socket z s -> KingGame -> a -> String -> (a -> KingGame -> Maybe String) -> ZMQ z Bool
-requestAgentAction srv game agent act_name action = loopRequest $ action agent game
-    where 
-        loopRequest Nothing = return False
-        loopRequest (Just item) = do
-            rsp <- executeAction srv $ mkPlayStr game act_name $ Just item
-            case rsp of
-                KAck -> return True
-                otherwise -> loopRequest $ action agent game
-
-
-evaluateMessage :: (KingPlayer a, Sender s, Receiver s) => Socket z s -> KingGame -> a -> String -> ZMQ z (Maybe KingGame)
-evaluateMessage srv game agent info = do
-    case splitOn " " info of
-        [] -> return $ Just game
-        t:m:ms | m == "START" -> do
-            return $ Just $ setPlayers game ms 
-        t:m:s:ms | m == "STARTHAND" -> do
-            let game' = startHand game s $ map readRule ms
-            cards <- executeAction srv $ mkPlayStr game' "GETHAND" Nothing
-            case cards of
-                (KHand cs) -> do
-                                when (user (player game) == s) (do 
-                                    -- This tricky fmap . fmap is so I can use show inside the Maybe that will be returned by chooseRule
-                                    ans <- requestAgentAction srv game'' agent "GAME" ((fmap . fmap) show . chooseRule)
-                                    when (ans) (do
-                                        executeAction srv $ mkPlayStr game'' "LEAVE" Nothing
-                                        return ())
-                                    return ())
-                                return $ Just game''
-                            where   game'' = setupCards game' (decodeJSON cs :: [String])
-                otherwise -> return Nothing
-        t:m:ms | m == "GAME" -> do
-            return $ Just $ setHandRule game $ readRule (concat ms)
-        t:m:ms | m == "TURN" -> do
-            let game' = moveTurn game $ concat ms
-            when (user (player game) `elem` ms) (do
-                ans <- requestAgentAction srv game' agent "PLAY" choosePlay
-                when (ans) (do
-                    executeAction srv $ mkPlayStr game' "LEAVE" Nothing
-                    return ())
-                return ())
-            return $ Just game'
-        t:m:cs | m == "PLAY" -> do
-            return $ Just $ playCard game $ concat cs
-        t:m:ms | m == "BIDS" -> do
-            -- return $ Just $ bidOffered game $ read $ concat cs
-            return $ Just $ game
-        t:m:ms | m == "BID" -> do
-            -- let game'= setBidder game $ concat cs
-            let game' = game
-            when (user (player game) `elem` ms) (do
-                ans <- requestAgentAction srv game' agent "BID" ((fmap . fmap) show . chooseBid)
-                when (ans) (do
-                    executeAction srv $ mkPlayStr game' "LEAVE" Nothing
-                    return ())
-                return ())
-            return $ Just game'
-        t:m:ms | m == "DECIDE" -> do
-            -- let game'= setDecider game $ concat cs
-            let game' = game
-            when (user (player game) `elem` ms) (do
-                ans <- requestAgentAction srv game' agent "DECIDE" ((fmap . fmap) show . chooseDecision)
-                when (ans) (do
-                    executeAction srv $ mkPlayStr game' "LEAVE" Nothing
-                    return ())
-                return ())
-            return $ Just game'
-        t:m:ms | m == "CHOOSETRUMP" -> do
-            -- let game'= setTrumpChooser game $ concat cs
-            let game' = game
-            when (user (player game) `elem` ms) (do
-                ans <- requestAgentAction srv game' agent "TRUMP" ((fmap . fmap) show . chooseTrumpSuit)
-                when (ans) (do
-                    executeAction srv $ mkPlayStr game' "LEAVE" Nothing
-                    return ())
-                return ())
-            return $ Just game'
-        t:m:w:scr | m == "ENDROUND" -> do
-            return $ Just $ endRound game w $ read $ concat scr
-        t:m:scrs | m == "ENDHAND" -> do
-            -- This message is a good to know info but I have it already
-            -- return $ Just $ endHand game $ map read $ intercalate " " scrs
-            return $ Just $ game
-        t:m:scrs | m == "GAMEOVER" -> do
-            return Nothing
-        otherwise -> return Nothing
 
 ------------------ Auxiliary Setup Requests -----------------------
 -- Authorizes Given user using provided password

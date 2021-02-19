@@ -2,11 +2,16 @@
 module Main where
 
 import Control.Monad
+import Control.Monad.State
+import Control.Monad.Reader
 import System.IO
 import System.Exit
 import System.Environment
 
 import KingClient
+import System.ZMQ4.Monadic
+
+import qualified Data.ByteString.Char8 as BS
 
 ---------- Declares the Player for this Application (KingBotAgent) ---------------
 --
@@ -20,6 +25,7 @@ import KingClient
 data KingBotAgent = KingBotAgent
     {   username :: String
     ,   password :: String
+    ,   botData  :: String
     }
 
 getFilter :: [KingCard] -> KingRule -> [KingCard] -> (KingCard -> Bool)
@@ -36,43 +42,92 @@ firstValid rule table cards = case cards' of
             []     -> head cards
     where cards' = filter (getFilter cards rule table) cards
 
-instance KingPlayer KingBotAgent where
-    getName :: KingBotAgent -> String
-    getName a = username a
+type KingAgentS z = StateT KingBotAgent (ZMQ z)
+type KingAgentSR z = ReaderT KingGame (KingAgentS z)
 
-    getPassword :: KingBotAgent -> String
-    getPassword a = password a
+-- Just Choose the First on the list (This may also return the current rule, but it's unexpected)
+chooseRule :: KingBotAgent -> KingGame -> Maybe KingRule
+chooseRule _ game = case gameHands game of
+    ((KingHand (Left (r:_)) _ _ _):_) -> Just r
+    ((KingHand (Right r) _ _ _):_) -> Just r
+    otherwise -> Nothing
+
+-- Chooses first valid card or Nothing if no play is possible
+choosePlay :: KingBotAgent -> KingGame -> Maybe KingCard
+choosePlay _ (KingGame _ cards _ _ _ ((KingHand (Right rule) tbCards _ _ ):_)) = Just $ firstValid rule tbCards cards
+choosePlay _ _ = Nothing
+
+updateAgentState :: (Sender s, Receiver s) => Socket z s -> ExpectedAction -> KingAgentSR z Bool
+updateAgentState _ (KOver s) = do
+    liftIO $ putStrLn $ "Game has ended: " ++ s
+    return False
+
+updateAgentState _ KWait = do
+    liftIO $ putStrLn $ "Agent could use this time to update some more."
+    return True
+
+updateAgentState srv KTrump = do
+    game <- ask
+    lift $ lift $ executeActionS srv $ mkPlayStr game "GAME" $ Just "POSITIVA H"
+    return True
+
+updateAgentState srv KBid = do
+    game <- ask
+    lift $ lift $ executeActionS srv $ mkPlayStr game "BID" $ Just "0"
+    return True
+
+updateAgentState srv KDecide = do
+    game <- ask
+    lift $ lift $ executeActionS srv $ mkPlayStr game "DECIDE" $ Just "False"
+    return True
+
+updateAgentState srv KRule = do
+    game <- ask
+    agent <- get
+    case chooseRule agent game of
+        Nothing     -> return False
+        (Just rule) -> do
+                lift $ lift $ executeActionS srv $ mkPlayStr game "GAME" $ Just $ show rule
+                return True
+
+updateAgentState srv KPlay = do
+    game <- ask
+    agent <- get
+    case choosePlay agent game of
+        Nothing     -> return False
+        (Just card) -> do
+                lift $ lift $ executeActionS srv $ mkPlayStr game "PLAY" $ Just card
+                return True
     
-    wantCreateTable :: KingBotAgent -> Bool
-    wantCreateTable _ = True
+updateAgentState _ _ = pure True
 
-    wantJoinTable :: KingBotAgent -> KingTable -> Bool
-    wantJoinTable _ _ = True
+-- Runs the game in a loop after initial socket setup
+runGameS :: String -> String -> KingBotAgent -> IO ()
+runGameS srv_addr sub_addr agent = runZMQ $ do
+    srv <- socket Req
+    connect srv srv_addr
 
-    -- Always chooses Hearts (for now)
-    chooseTrumpSuit :: KingBotAgent -> KingGame -> Maybe KingSuit
-    chooseTrumpSuit _ _ = Just 'H'
+    -- Before Joining is important to subscribe to that Table's channel to not miss any message
+    info <- socket Sub
+    connect info sub_addr
 
-    -- Always refuses
-    chooseDecision :: KingBotAgent -> KingGame -> Maybe Bool
-    chooseDecision _ _ = Just False
+    -- TODO: There must be a better way for me to connect the game start with the other actions on the State Monad
+    (suc, g) <- runStateT (startGame srv info (username agent) (password agent)) $ mkGame (Player "" "") "" ""
+    when (suc == False) $ do
+        liftIO $ putStrLn "Error during game setup."
+        return ()
 
-    -- Always forefeits
-    chooseBid :: KingBotAgent -> KingGame -> Maybe Int
-    chooseBid _ _ = Just 0
-
-    -- Chooses first valid card or Nothing if no play is possible
-    choosePlay :: KingBotAgent -> KingGame -> Maybe KingCard
-    choosePlay _ (KingGame _ cards _ _ _ ((KingHand (Right rule) tbCards _ _ ):_)) = Just $ firstValid rule tbCards cards
-    choosePlay _ _ = Nothing
-
-    -- Just Choose the First on the list (This may also return the current rule, but it's unexpected)
-    chooseRule :: KingBotAgent -> KingGame -> Maybe KingRule
-    chooseRule _ game = case gameHands game of
-        ((KingHand (Left (r:_)) _ _ _):_) -> Just r
-        ((KingHand (Right r) _ _ _):_) -> Just r
-        otherwise -> Nothing
-
+    -- This is the Game Loop, once we return from here, game is over and state is destroyed
+    loop info srv agent g
+    where
+        loop info srv agent game = do
+            (action, game') <- runStateT (updateGame srv info 100) game
+            (end, agent')   <- runStateT (runReaderT (updateAgentState srv action) game') agent
+            --end <- evalStateT (updateAgent agent srv action) game'
+            liftIO $ putStrLn $ show game'
+            case end of
+                False   -> return ()
+                True    -> loop info srv agent' game'
 
 -- Launchs an Agent with given username and password
 main :: IO ()
@@ -87,4 +142,4 @@ main = do
         king_srv_addr = "tcp://localhost:5555"
         king_sub_addr = "tcp://localhost:5556"
 
-    runGame king_srv_addr king_sub_addr $ KingBotAgent usrname passwrd
+    runGameS  king_srv_addr king_sub_addr $ KingBotAgent usrname passwrd ""
