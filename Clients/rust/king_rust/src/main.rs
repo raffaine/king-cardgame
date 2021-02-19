@@ -45,7 +45,7 @@ impl fmt::Display for GameAction {
             GameAction::Play => write!(f, "PLAY"),
             GameAction::Bid => write!(f, "BID"),
             GameAction::Decide => write!(f, "DECIDE"),
-            GameAction::ChooseTrump => write!(f, "TRUMP"),
+            GameAction::ChooseTrump => write!(f, "GAME POSITIVA"),
             _ => write!(f, "LEAVE")
         }
     }
@@ -65,7 +65,7 @@ struct KingGame
 
 impl KingGame {
     fn play_card(&mut self, player: &str, card: &str) {
-        let mut hand = self.hands.last_mut().unwrap();
+        let hand = self.hands.last_mut().unwrap();
         hand.cur_round.push(String::from(card));
         if self.player.name == player {
             let index = self.cards.iter().position(|x| *x == card).unwrap();
@@ -80,7 +80,7 @@ impl KingGame {
     }
 
     fn evaluate(&mut self, manager: &GameManager, info: String) -> bool {
-        let mut args : Vec<String> = info.split(" ").map(|s| String::from(s)).collect();
+        let args : Vec<String> = info.split(" ").map(|s| String::from(s)).collect();
 
         if args.len() < 2 || args[0] != self.table.name {
             println!("Badly formatted message or directed to another table");
@@ -156,7 +156,6 @@ impl KingGame {
 struct GameManager
     { req_skt:      zmq::Socket
     , sub_skt:      zmq::Socket
-    , zmq_ctx:      zmq::Context
     }
 
 fn setup_manager(base_url: &str) -> GameManager {
@@ -170,7 +169,6 @@ fn setup_manager(base_url: &str) -> GameManager {
     GameManager
     { req_skt: req
     , sub_skt: sub
-    , zmq_ctx: ctx
     }
 }
 
@@ -243,7 +241,7 @@ impl GameManager {
         self.req_skt.send(&format!("LEAVE {} {}", game.player.name, game.secret), 0).unwrap();
         self.req_skt.recv(&mut msg, 0).unwrap();
     
-        let data = String::from(msg.as_str().unwrap());
+        let _data = String::from(msg.as_str().unwrap());
     }
 
     fn get_player_cards(&self, game: &mut KingGame) -> () {
