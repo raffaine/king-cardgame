@@ -1,0 +1,21 @@
+{
+  "name": "kingcardgame",
+  "version": "0.0.0",
+  "description": "Proxy socket.io working as client for ZeroMQ server",
+  "main": "app.js",
+  "scripts": {
+    "app": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "king",
+    "cardgame"
+  ],
+  "author": "Julio Raffaine",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.14.0",
+    "socket.io": "^1.7.2",
+    "zeromq": "^5.2.0"
+  }
+}
