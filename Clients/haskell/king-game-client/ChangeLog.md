@@ -1,3 +1,3 @@
-# Changelog for king-game-client
+# Changelog for king-game
 
 ## Unreleased changes

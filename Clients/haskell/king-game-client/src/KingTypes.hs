@@ -1,0 +1,94 @@
+{-# LANGUAGE InstanceSigs #-}
+module KingTypes
+    ( KingRule(..)
+    , readRule
+    , KingCard
+    , KingSuit
+    , Card(..)
+    , Suit(..)
+    , Rank(..)
+    , parseCard
+    , unparseCard
+    )
+    where
+
+data KingRule = RVaza | RMulheres | RHomens | RKing | RCopas | R2Ultimas |
+                RPositiva | RPositivaH | RPositivaS | RPositivaD | RPositivaC
+    deriving Eq
+
+instance Show KingRule where
+    show :: KingRule -> String
+    show r = case r of
+        RVaza       -> "VAZA"
+        RHomens     -> "HOMENS"
+        RMulheres   -> "MULHERES"
+        R2Ultimas   -> "2ULTIMAS"
+        RCopas      -> "COPAS"
+        RKing       -> "KING"
+        _           -> "POSITIVA" -- Defaults to Positiva for all Positiva variants
+
+readRule :: String -> KingRule
+readRule rule = case rule of 
+    m | m == "VAZA"      -> RVaza
+    m | m == "HOMENS"    -> RHomens
+    m | m == "MULHERES"  -> RMulheres
+    m | m == "2ULTIMAS"  -> R2Ultimas
+    m | m == "COPAS"     -> RCopas
+    m | m == "KING"      -> RKing
+    m | m == "POSITIVAH" -> RPositivaH
+    m | m == "POSITIVAC" -> RPositivaC
+    m | m == "POSITIVAS" -> RPositivaS
+    m | m == "POSITIVAD" -> RPositivaD
+    _ -> RPositiva  -- Default to generic Positiva if unknown rule is encountered
+
+type KingCard = String
+type KingSuit = Char
+
+-- Deriving Enum and Bounded is handy for iterating over a deck.
+-- Ording of Rank and Suit is crucial for determining trick winners. (arbitrary in the case of Suits)
+data Suit = Clubs | Diamonds | Hearts | Spades 
+    deriving (Eq, Ord, Show, Enum, Bounded)
+
+-- The order of constructors dictates the 'Ord' derivation. 
+-- R2 is the lowest, Ace is the highest. This replaces Python's RANKS.index()
+data Rank = R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10 | Jack | Queen | King | Ace 
+    deriving (Eq, Ord, Show, Enum, Bounded)
+
+data Card = Card { cardRank :: Rank, cardSuit :: Suit } 
+    deriving (Eq, Ord, Show)
+
+-- | Converts the wire string format (e.g., "TC", "AH") into our robust ADT
+parseCard :: KingCard -> Card
+parseCard [r, s] = Card (parseRank r) (parseSuit s)
+  where
+    parseRank '2' = R2
+    parseRank '3' = R3
+    parseRank '4' = R4
+    parseRank '5' = R5
+    parseRank '6' = R6
+    parseRank '7' = R7
+    parseRank '8' = R8
+    parseRank '9' = R9
+    parseRank 'T' = R10
+    parseRank 'J' = Jack
+    parseRank 'Q' = Queen
+    parseRank 'K' = King
+    parseRank 'A' = Ace
+    parseRank _   = error "Invalid Rank"
+
+    parseSuit 'C' = Clubs
+    parseSuit 'D' = Diamonds
+    parseSuit 'H' = Hearts
+    parseSuit 'S' = Spades
+    parseSuit _   = error "Invalid Suit"
+parseCard _ = error "Invalid Card Format"
+
+-- | Converts our ADT back to the wire format if needed
+unparseCard :: Card -> KingCard
+unparseCard (Card r s) = [rankChar r, suitChar s]
+  where
+    rankChar R2 = '2'; rankChar R3 = '3'; rankChar R4 = '4'; rankChar R5 = '5'
+    rankChar R6 = '6'; rankChar R7 = '7'; rankChar R8 = '8'; rankChar R9 = '9'
+    rankChar R10 = 'T'; rankChar Jack = 'J'; rankChar Queen = 'Q'; rankChar King = 'K'; rankChar Ace = 'A'
+    
+    suitChar Clubs = 'C'; suitChar Diamonds = 'D'; suitChar Hearts = 'H'; suitChar Spades = 'S'
