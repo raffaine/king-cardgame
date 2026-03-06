@@ -1,6 +1,17 @@
 ## Haskell ignores
 dist-newstyle/
 
+# GHC artifacts
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
+*.prof
+*.aux
+*.hp
+*.eventlog
+
+
 ## Python ignores
 *.pyc
 

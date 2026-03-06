@@ -2,6 +2,9 @@
 module KingTypes
     ( KingRule(..)
     , readRule
+    , startingRules
+    , isPositiva
+    , allNegativeRules
     , KingCard
     , KingSuit
     , Card(..)
@@ -40,6 +43,18 @@ readRule rule = case rule of
     m | m == "POSITIVAS" -> RPositivaS
     m | m == "POSITIVAD" -> RPositivaD
     _ -> RPositiva  -- Default to generic Positiva if unknown rule is encountered
+
+-- | Helper to check if a rule is a Positiva variant
+isPositiva :: KingRule -> Bool
+isPositiva r = r `elem` [RPositiva, RPositivaH, RPositivaC, RPositivaS, RPositivaD]
+
+-- A helper defining the standard starting rules for a player based on king.py
+startingRules :: [KingRule]
+startingRules = [RVaza, RHomens, RMulheres, R2Ultimas, RCopas, RKing, RPositiva]
+
+-- | All negative rules in the game
+allNegativeRules :: [KingRule]
+allNegativeRules = [RVaza, RHomens, RMulheres, R2Ultimas, RCopas, RKing]
 
 type KingCard = String
 type KingSuit = Char

@@ -4,6 +4,32 @@ import GameRules
 
 import ServerLogic
 import KingClient
+import Data.Maybe (fromJust)
+import qualified Data.Map as Map
+
+-- | Helper to fast-forward the server state to a fully joined, started table.
+setupStartedGame :: (ServerContext, String)
+setupStartedGame = 
+  let c0 = emptyServerContext
+      -- 1. Alice Auths & Creates Table
+      (_, _, cA)  = handleCommand c0 "chan-A" ["AUTHORIZE", "Alice", "pass"]
+      (_, _, cT1) = handleCommand cA "table-1" ["TABLE", "Alice", "chan-A"]
+      (_, _, cJ1) = handleCommand cT1 "sec-A" ["JOIN", "Alice", "chan-A", "table-1"]
+      
+      -- 2. Bob Auths & Joins
+      (_, _, cB)  = handleCommand cJ1 "chan-B" ["AUTHORIZE", "Bob", "pass"]
+      (_, _, cJ2) = handleCommand cB "sec-B" ["JOIN", "Bob", "chan-B", "table-1"]
+      
+      -- 3. Cat Auths & Joins
+      (_, _, cC)  = handleCommand cJ2 "chan-C" ["AUTHORIZE", "Cat", "pass"]
+      (_, _, cJ3) = handleCommand cC "sec-C" ["JOIN", "Cat", "chan-C", "table-1"]
+      
+      -- 4. Dave Auths & Joins (Triggers START)
+      (_, _, cD)  = handleCommand cJ3 "chan-D" ["AUTHORIZE", "Dave", "pass"]
+      (_, _, cJ4) = handleCommand cD "sec-D" ["JOIN", "Dave", "chan-D", "table-1"]
+      
+  in (cJ4, "table-1")
+
 
 main :: IO ()
 main = hspec $ do
@@ -197,7 +223,6 @@ main = hspec $ do
             -- And the table should have both
             curRound (head (gameHands afterAlicePlays)) `shouldBe` ["3C", "AH"]
 
-
     describe "KingClient: Hand Lifecycle" $ do
         let pAlice = Player "Alice" "ch1"
             gameWPlayers = setPlayers (mkGame pAlice "T1" "s") ["Alice", "Bob", "Charlie", "Dave"]
@@ -214,7 +239,6 @@ main = hspec $ do
                 committed = setHandRule started RKing
                 
             handRule (head (gameHands committed)) `shouldBe` Right RKing
-
 
     describe "KingClient: Score Accumulation (endRound)" $ do
         let pAlice = Player "Alice" "ch1"
@@ -244,8 +268,6 @@ main = hspec $ do
             
             -- We should have two score arrays in the history now
             handScore currentHand `shouldBe` [[0, 0, -20, 0], [0, -50, 0, 0]]
-
-            -- Add this import at the top of Spec.hs
 
     ----------------------------------------------------------------------
     -- 5. PURE SERVER LOGIC
@@ -330,3 +352,171 @@ main = hspec $ do
                     (reply, _, _)     = handleCommand ctxE "sec-E" ["JOIN", "Eve", "chan-eve", "table-456"]
                 
                 reply `shouldBe` "ERROR Table is already full"
+
+    ----------------------------------------------------------------------
+    -- 6. SERVER LOGIC: GAME LIFECYCLE & TURNS
+    ----------------------------------------------------------------------
+    describe "ServerLogic: Advanced Game Lifecycle" $ do
+        let (ctxStarted, tId) = setupStartedGame
+
+        describe "Rule Calling & Starter Order" $ do
+            it "enforces that required action has been broadcasted" $ do
+                pendingWith "Requires more granular state control in ServerLogic to test pre-START conditions"
+
+            it "enforces that Player 0 (Alice) must choose the first rule" $ do
+                -- Bob tries to call a game out of turn
+                let (replyB, _, _) = handleCommand ctxStarted "msg1" ["GAME", "Bob", "sec-B", "COPAS"]
+                replyB `shouldBe` "ERROR Not your turn to choose a rule"
+
+                -- Alice calls it correctly
+                let (replyA, bcastA, _) = handleCommand ctxStarted "msg2" ["GAME", "Alice", "sec-A", "COPAS"]
+                replyA `shouldBe` "ACK"
+                bcastA `shouldBe` Just "table-1 GAME COPAS"
+
+            it "prevents a player from calling a rule they have already exhausted" $ do
+                -- Assuming Alice already played COPAS in a previous hand...
+                -- (We will need to manually construct this context later when we implement the state, 
+                -- but the test defines the expectation now!)
+                pendingWith "Requires hand-history state implementation"
+                -- reply `shouldBe` "ERROR Rule already played by this user"
+
+        describe "Turn Progression (Playing Tricks)" $ do
+            -- We fast-forward to a state where Alice has chosen COPAS
+            let (_, _, ctxGameCopas) = handleCommand ctxStarted "msg2" ["GAME", "Alice", "sec-A", "COPAS"]
+
+            it "enforces that the hand starter must play the first card" $ do
+                -- Cat tries to play first
+                let (replyC, _, _) = handleCommand ctxGameCopas "msg3" ["PLAY", "Cat", "sec-C", "2C"]
+                replyC `shouldBe` "ERROR Not your turn"
+
+                -- Alice plays correctly
+                let (replyA, bcastA, _) = handleCommand ctxGameCopas "msg4" ["PLAY", "Alice", "sec-A", "2C"]
+                replyA `shouldBe` "ACK"
+                bcastA `shouldBe` Just "table-1 PLAY 2C"
+
+            it "advances the turn order sequentially after a valid play" $ do
+                let (_, _, ctxTurn2) = handleCommand ctxGameCopas "msg4" ["PLAY", "Alice", "sec-A", "2C"]
+                
+                -- It should now be Bob's turn
+                let (replyB, _, _) = handleCommand ctxTurn2 "msg5" ["PLAY", "Bob", "sec-B", "3C"]
+                replyB `shouldBe` "ACK"
+
+            it "evaluates the trick and assigns the next turn to the trick winner" $ do
+                pendingWith "Requires trick evaluation to be wired into ServerLogic"
+                -- We will assert that if Cat won the trick, the next active turn belongs to Cat.
+
+        describe "Positiva Bidding Lifecycle" $ do
+            let (_, _, ctxPositiva) = handleCommand ctxStarted "msgPos" ["GAME", "Alice", "sec-A", "POSITIVA"]
+
+            it "transitions into a BID state and expects the next player to bid or pass" $ do
+                -- Alice chose Positiva. In King, bidding usually starts with the next player (Bob).
+                let (replyA, _, _) = handleCommand ctxPositiva "msgB" ["BID", "Alice", "sec-A", "1"]
+                replyA `shouldBe` "ERROR Not your turn to bid"
+                
+                let (replyB, bcastB, _) = handleCommand ctxPositiva "msgB2" ["BID", "Bob", "sec-B", "0"] -- 0 = Pass
+                replyB `shouldBe` "ACK"
+                bcastB `shouldBe` Just "table-1 BID Bob 0"
+
+            it "allows the bidding winner to CHOOSETRUMP" $ do
+                pendingWith "Requires bidding state resolution"
+                -- Once 3 players pass, the winner sends ["CHOOSETRUMP", usr, sec, "H"]
+
+        describe "Game Termination" $ do
+            it "broadcasts GAMEOVER after the final hand is completed" $ do
+                pendingWith "Requires hand-exhaustion tracking"
+                -- We will assert that when the final trick of the final hand is evaluated, 
+                -- bcast `shouldBe` Just "table-1 GAMEOVER [final scores]"
+
+    ----------------------------------------------------------------------
+    -- 7. SERVER LOGIC: SECURITY & STATE TRANSITIONS
+    ----------------------------------------------------------------------
+    describe "ServerLogic: Security and State Transitions" $ do
+        
+        describe "Action Security (validateTableAction)" $ do
+            let (ctxStarted, tId) = setupStartedGame 
+
+            it "rejects a GAME command if the player secret is incorrect" $ do
+                -- Alice tries to call a rule but uses the wrong secret
+                let (reply, _, _) = handleCommand ctxStarted "msg" ["GAME", "Alice", "wrong-secret", "COPAS"]
+                reply `shouldBe` "ERROR Invalid table secret"
+
+            it "rejects a PLAY command if the player secret is incorrect" $ do
+                -- Fast forward to playing trick
+                let (_, _, ctxPlaying) = handleCommand ctxStarted "msg" ["GAME", "Alice", "sec-A", "COPAS"]
+                let (reply, _, _) = handleCommand ctxPlaying "msg2" ["PLAY", "Alice", "wrong-secret", "2H"]
+                reply `shouldBe` "ERROR Invalid table secret"
+                
+            it "rejects commands from users not found at the table" $ do
+                let (reply, _, _) = handleCommand ctxStarted "msg" ["GAME", "Ghost", "sec-ghost", "COPAS"]
+                reply `shouldBe` "ERROR User not at table"
+
+        describe "Table Start Transitions (startTable)" $ do
+            let c0 = emptyServerContext
+                (_, _, cA)  = handleCommand c0 "chan-A" ["AUTHORIZE", "Alice", "pass"]
+                (_, _, cT)  = handleCommand cA "table-1" ["TABLE", "Alice", "chan-A"]
+                (_, _, cJ1) = handleCommand cT "sec-A" ["JOIN", "Alice", "chan-A", "table-1"]
+                (_, _, cB)  = handleCommand cJ1 "chan-B" ["AUTHORIZE", "Bob", "pass"]
+                (_, _, cJ2) = handleCommand cB "sec-B" ["JOIN", "Bob", "chan-B", "table-1"]
+                (_, _, cC)  = handleCommand cJ2 "chan-C" ["AUTHORIZE", "Cat", "pass"]
+                (_, _, cJ3) = handleCommand cC "sec-C" ["JOIN", "Cat", "chan-C", "table-1"]
+
+            -- Note: To make these tests compile in the red phase, you'll need to expose 
+            -- getTable, tPhase, GamePhase(..), tAvailableRules, and startingRules from ServerLogic.hs
+            
+            it "keeps the table in the Lobby phase with 3 players" $ do
+                let table = fromJust $ getTable cJ3 "table-1"
+                tPhase table `shouldBe` Lobby
+
+            it "transitions to WaitingForRule and assigns rules when the 4th player joins" $ do
+                let (_, _, cD)  = handleCommand cJ3 "chan-D" ["AUTHORIZE", "Dave", "pass"]
+                    (_, _, cJ4) = handleCommand cD "sec-D" ["JOIN", "Dave", "chan-D", "table-1"]
+                    table = fromJust $ getTable cJ4 "table-1"
+                
+                tPhase table `shouldBe` WaitingForRule
+                
+                -- Check that Alice got her starting menu of rules
+                --let aliceRules = Map.findWithDefault [] "Alice" (tAvailableRules table)
+                --aliceRules `shouldBe` startingRules
+
+        describe "ServerLogic: Advanced Rule Calling (Op-Log Algorithm)" $ do
+            let (ctxStarted, tId) = setupStartedGame
+                
+                -- Helper to force the history into a specific state for testing
+                setHistory ctx history = 
+                    let table = fromJust (getTable ctx tId)
+                        updatedTable = table { tPlayedHands = history }
+                    in ctx { scTables = Map.insert tId updatedTable (scTables ctx) }
+
+            it "allows a player to pick Positiva if they haven't picked one yet" $ do
+                -- History is empty, Alice tries to call Positiva
+                let (reply, _, _) = handleCommand ctxStarted "msg" ["GAME", "Alice", "sec-A", "POSITIVA"]
+                reply `shouldBe` "ACK"
+
+            it "forces a player to pick a negative rule if they already used their Positiva" $ do
+                -- Alice already picked Positiva. Now it's her turn again.
+                let ctxAliceUsedPos = setHistory ctxStarted [("Alice", RPositiva)]
+                
+                -- She tries to pick Positiva again
+                let (reply1, _, _) = handleCommand ctxAliceUsedPos "msg" ["GAME", "Alice", "sec-A", "POSITIVAH"]
+                reply1 `shouldBe` "ERROR Rule not available for this player at this time"
+                
+                -- She picks a negative rule instead (allowed)
+                let (reply2, _, _) = handleCommand ctxAliceUsedPos "msg" ["GAME", "Alice", "sec-A", "COPAS"]
+                reply2 `shouldBe` "ACK"
+
+            it "forces a player to pick Positiva if they used theirs, BUT all negatives are gone" $ do
+                -- All 6 negative games have been played by various people. Alice already used a Positiva.
+                let exhaustedHistory = 
+                        [ ("Alice", RPositiva)
+                        , ("Bob", RVaza), ("Cat", RHomens), ("Dave", RMulheres)
+                        , ("Bob", R2Ultimas), ("Cat", RCopas), ("Dave", RKing)
+                        ]
+                    ctxExhausted = setHistory ctxStarted exhaustedHistory
+                    
+                -- Alice tries to pick a negative rule (None left)
+                let (reply1, _, _) = handleCommand ctxExhausted "msg" ["GAME", "Alice", "sec-A", "COPAS"]
+                reply1 `shouldBe` "ERROR Rule not available for this player at this time"
+                
+                -- Alice is forced to pick Positiva again, effectively giving it to someone else
+                let (reply2, _, _) = handleCommand ctxExhausted "msg" ["GAME", "Alice", "sec-A", "POSITIVA"]
+                reply2 `shouldBe` "ACK"
