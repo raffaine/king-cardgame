@@ -1,4 +1,10 @@
+## Haskell ignores
+dist-newstyle/
+
+## Python ignores
 *.pyc
+
+## VS and VS Code ignores
 *.log
 *.exe
 *.suo
@@ -11,4 +17,6 @@ bin/
 obj/
 .vscode/
 logs/
+
+## Node.js ignores
 node_modules/
