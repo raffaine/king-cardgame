@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ConsoleClient", "ConsoleClient.vcxproj", "{0E6FA59C-55EA-4CC7-889A-B7BDBAEB428F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0E6FA59C-55EA-4CC7-889A-B7BDBAEB428F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0E6FA59C-55EA-4CC7-889A-B7BDBAEB428F}.Debug|Win32.Build.0 = Debug|Win32
+		{0E6FA59C-55EA-4CC7-889A-B7BDBAEB428F}.Release|Win32.ActiveCfg = Release|Win32
+		{0E6FA59C-55EA-4CC7-889A-B7BDBAEB428F}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
