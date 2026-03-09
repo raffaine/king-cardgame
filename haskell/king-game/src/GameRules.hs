@@ -1,11 +1,12 @@
 {- HLINT ignore "Redundant if" -}
-module GameRules (isValidPlay, evaluateTrick) where
+module GameRules (isValidPlay, evaluateTrick, isHandComplete) where
 
 import KingTypes
     ( KingRule(..)
+    , KingCard
     , Card(..)
     , Suit(..)
-    , Rank(..)
+    , Rank(..), parseCard, unparseCard
     )
 import Data.List (elemIndex)
 import Data.Maybe (fromJust, isNothing)
@@ -13,9 +14,11 @@ import Text.JSON.Parsec (parse)
 
 -- | Evaluates if a card play is valid based on the current rule, table, and hand.
 --   Returns True if valid, False otherwise.
-isValidPlay :: KingRule -> [Card] -> [Card] -> Card -> Bool
-isValidPlay rule table hand card =
-    isValidGenerally table hand card && meetsRuleConstraints rule table hand card
+isValidPlay :: KingRule -> [KingCard] -> [KingCard] -> KingCard -> Bool
+isValidPlay rule table hand card = isValidGenerally table' hand' card' && meetsRuleConstraints rule table' hand' card'
+    where   table' = map parseCard table
+            hand'  = map parseCard hand
+            card'  = parseCard card
 
 -- | General validation logic for following suit, applicable to all rules.
 isValidGenerally :: [Card] -> [Card] -> Card -> Bool
@@ -46,13 +49,15 @@ meetsRuleConstraints _ _ _ _ = True
 
 type RoundCount = Int  -- Placeholder for round count tracking
 
-evaluateTrick :: KingRule -> RoundCount -> [Card] -> (Int, Int)
+-- | Evaluates the cards on a table given a Rule, returns round winner and their score
+evaluateTrick :: KingRule -> RoundCount -> [KingCard] -> (Int, Int)
 evaluateTrick rule round cards =
-    let ledSuit = cardSuit (head cards)
+    let cards' = map parseCard cards
+        ledSuit = cardSuit (head cards')
         -- Determine the winner of the trick based on the led suit and any trumps
-        winnerIndex = determineWinner rule ledSuit cards
+        winnerIndex = determineWinner rule ledSuit cards'
         -- Calculate score based on the rule and round count
-        score = calculateScore rule round cards
+        score = calculateScore rule round cards'
     in (winnerIndex, score)
 
 getPositivaSuit :: KingRule -> Maybe Suit
@@ -85,3 +90,12 @@ calculateScore rule round cards = case rule of
     RCopas -> -(20 * length (filter (\c -> cardSuit c == Hearts) cards))
     RKing -> if Card King Hearts `elem` cards then -160 else 0
     _ -> if isNothing (getPositivaSuit rule) then 0 else 25
+
+-- | Determines if a hand is mathematically over based on the remaining cards in play.
+isHandComplete :: KingRule -> [KingCard] -> Bool
+isHandComplete rule remainingCards = case rule of
+    RKing     -> "KH" `notElem` remainingCards
+    RMulheres -> not $ any (\(c:cs) -> c == 'Q') remainingCards
+    RHomens   -> not $ any (\(c:cs) -> c == 'J' || c == 'K') remainingCards
+    RCopas    -> not $ any (\c -> last c == 'H') remainingCards
+    _         -> null remainingCards -- VAZA, 2ULTIMAS, POSITIVA must play to 0 cards
