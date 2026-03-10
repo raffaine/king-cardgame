@@ -5,6 +5,7 @@ module ServerLogic
     , GamePhase(..)
     , ServerTable(..)
     , MonadGameEnv(..)
+    , KingCard
     , emptyServerContext
     , handleCommand
     ) where
@@ -200,6 +201,21 @@ handleCommand ctx ["TABLE", usr, chan]
         return (tId, [], ctx')
 
 ----------------------------------------------------------------------
+-- LIST (No arguments)
+----------------------------------------------------------------------
+handleCommand ctx ["LIST"] = do
+    let tablesList = Map.toList (scTables ctx)
+        
+        formatTable (tId, table) =
+            "{\"name\": \"" ++ tId ++ "\", \"players\": [" ++
+            intercalate ", " (map (\p -> "\"" ++ pName p ++ "\"") (tPlayers table)) ++
+            "]}"
+            
+        jsonStr = "[" ++ intercalate ", " (map formatTable tablesList) ++ "]"
+        
+    return (jsonStr, [], ctx)
+
+----------------------------------------------------------------------
 -- JOIN <username> <channel> <table_id>
 ----------------------------------------------------------------------
 handleCommand ctx ["JOIN", usr, chan, tId]
@@ -282,6 +298,17 @@ handleCommand ctx ["GAME", usr, sec, ruleStr] = do
                     return ("ACK", bcasts, ctx')
 
 ----------------------------------------------------------------------
+-- GETTURN <username> <secret>
+----------------------------------------------------------------------
+handleCommand ctx ["GETTURN", usr, sec] = do
+    case validateTableMembership ctx usr sec of
+        Left err -> return (err, [], ctx)
+        Right (_tId, table, _pIndex) -> do
+            -- tActiveTurn is the index (0-3) of the player on the clock
+            let turnName = pName (tPlayers table !! tActiveTurn table)
+            return (turnName, [], ctx)
+
+----------------------------------------------------------------------
 -- PLAY <username> <secret> <card_string>
 ----------------------------------------------------------------------
 handleCommand ctx ["PLAY", usr, sec, cardStr] = do
@@ -360,17 +387,16 @@ handleCommand ctx ["PLAY", usr, sec, cardStr] = do
                                     then return ("ACK", bcast, ctx') -- Returns ENDROUND sequence only
                                     else do
                                         let newTotalScores = zipWith (+) (tTotalScores table) updatedScores
-                                            endHandBCast  = tId ++ " ENDHAND " ++ "[" ++ unwords (map show updatedScores) ++ "]"
+                                            endHandBCast  = tId ++ " ENDHAND " ++ unwords (map show updatedScores)
                                             isGameOver = length (tPlayedHands table) == 10 -- Game Finishes after 10 hands
 
                                         if isGameOver
                                             then do
                                                 -- 10 hands complete. Calculate the global winner!
                                                 let maxScore = maximum newTotalScores
-                                                    totalScoreStr = "[" ++ unwords (map show newTotalScores) ++ "]"
                                                     winnerGlobalIdx = fromMaybe 0 (maxScore `elemIndex` newTotalScores)
                                                     globalWinnerName = pName (tPlayers table !! winnerGlobalIdx)
-                                                    endGameBCast = tId ++ " GAMEOVER " ++ globalWinnerName ++ " " ++ totalScoreStr
+                                                    endGameBCast = tId ++ " GAMEOVER " ++ unwords (map show newTotalScores)
 
                                                     updatedTable = table
                                                         { tPhase = GameOver
@@ -527,6 +553,33 @@ handleCommand ctx ["TRUMP", usr, sec, suitStr] = do
 
                         return ("ACK", bcasts, ctx')
                 _ -> return ("ERROR Game is not waiting for trump selection", [], ctx)
+
+----------------------------------------------------------------------
+-- LEAVE <username> <secret>
+----------------------------------------------------------------------
+handleCommand ctx ["LEAVE", usr, sec] = do
+    case validateTableMembership ctx usr sec of
+        Left err -> return ("ERROR Player not in table", [], ctx)
+        Right (tId, table, _pIndex) -> do
+            let isNotStarted = tPhase table == Lobby
+                leaveBcast = tId ++ " LEAVE " ++ usr
+            
+            if isNotStarted
+            then do
+                -- Safely remove the player from the lobby
+                let newPlayers = filter (\p -> pName p /= usr) (tPlayers table)
+                    updatedTable = table { tPlayers = newPlayers }
+                    ctx' = ctx { scTables = Map.insert tId updatedTable (scTables ctx) }
+                return ("ACK", [leaveBcast], ctx')
+            else do
+                -- Game was already running! Destroy the table and boot everyone.
+                let scoreStr = unwords (map show (tTotalScores table))
+                    bcasts = [ leaveBcast
+                             , tId ++ " GAMEOVER " ++ scoreStr 
+                             ]
+                    -- Remove the table entirely from the server context
+                    ctx' = ctx { scTables = Map.delete tId (scTables ctx) }
+                return ("ACK", bcasts, ctx')
 
 ----------------------------------------------------------------------
 -- FALLBACK

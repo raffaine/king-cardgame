@@ -761,9 +761,10 @@ main = hspec $ do
                 -- Bob takes the trick (highest heart), and the game moves to the next hand.
                 bcastsT4 `shouldBe` [ "table-1 PLAY 6C"
                                     , "table-1 ENDROUND Dave -160" -- Dave wins the trick with the King of Hearts and gets -160 points in King
-                                    , "table-1 ENDHAND [0 0 0 -160]"
+                                    , "table-1 ENDHAND 0 0 0 -160"
                                     , "table-1 STARTHAND Bob VAZA HOMENS MULHERES 2ULTIMAS COPAS POSITIVA"
                                     ]
+
         describe "Game Termination (GAMEOVER Protocol via Micro-Decks)" $ do
             -- A generic 1-card deck for the first 9 hands. 
             -- Deal order: Alice gets 2H, Bob 4C, Cat 7D, Dave 9S.            
@@ -802,6 +803,57 @@ main = hspec $ do
                 -- Bob played the KH (the highest heart in this trick), so he wins the trick and gets the -160.
                 bcasts `shouldBe` [ "table-1 PLAY KH"
                                 , "table-1 ENDROUND Bob -160"
-                                , "table-1 ENDHAND [0 -160 0 0]"
-                                , "table-1 GAMEOVER Cat [-15 -165 25 -65]" -- Not ideal but needed (not ideal because test is peering into the rules to replicate server calculations)
+                                , "table-1 ENDHAND 0 -160 0 0"
+                                , "table-1 GAMEOVER -15 -165 25 -65" -- Not ideal but needed (not ideal because test is peering into the rules to replicate server calculations)
                                 ]
+
+    describe "Utility Commands (LIST, GETTURN, LEAVE)" $ do
+        -- Setup an empty lobby with two players
+        let c0 = emptyServerContext
+            (_, _, cA)  = runCmd' c0 ["AUTHORIZE", "Alice", "pass"] ["chan-A"]
+            (_, _, cT1) = runCmd' cA ["TABLE", "Alice", "chan-A"] ["table-1"]
+            (_, _, cJ1) = runCmd' cT1 ["JOIN", "Alice", "chan-A", "table-1"] ["sec-A"]
+            (_, _, cB)  = runCmd' cJ1 ["AUTHORIZE", "Bob", "pass"] ["chan-B"]
+            (_, _, lobbyCtx) = runCmd' cB ["JOIN", "Bob", "chan-B", "table-1"] ["sec-B"]
+
+        -- Setup a fully started game
+        let dummyDeck = [ ["2H", "3H"], ["4C", "5C"], ["6D", "7D"], ["8S", "9S"] ]
+            (startedCtx, _) = setupStartedGame [dummyDeck]
+
+        it "LIST: returns a JSON array of active tables and their players" $ do
+            let (reply, _, _) = runCmd lobbyCtx ["LIST"]
+            -- Expecting something like: [{"name": "table-1", "players": ["Alice", "Bob"]}]
+            reply `shouldContain` "\"name\": \"table-1\""
+            reply `shouldContain` "\"Alice\""
+            reply `shouldContain` "\"Bob\""
+
+        it "GETTURN: returns the name of the active player" $ do
+            -- In a newly started game, it is the starter's turn to pick a rule
+            let (reply, _, _) = runCmd startedCtx ["GETTURN", "Alice", "sec-A"]
+            reply `shouldBe` "Alice"
+
+        it "LEAVE (Lobby): gracefully removes a player without destroying the table" $ do
+            let (reply, bcasts, ctxAfterLeave) = runCmd lobbyCtx ["LEAVE", "Bob", "sec-B"]
+            
+            reply `shouldBe` "ACK"
+            bcasts `shouldBe` ["table-1 LEAVE Bob"]
+            
+            -- Verify the table still exists but Bob is gone
+            let (listReply, _, _) = runCmd ctxAfterLeave ["LIST"]
+            listReply `shouldContain` "table-1"
+            listReply `shouldContain` "\"Alice\""
+            listReply `shouldNotContain` "\"Bob\""
+
+        it "LEAVE (Started): destroys the table and broadcasts GAMEOVER to remaining players" $ do
+            -- Cat rage-quits after the game starts
+            let (reply, bcasts, ctxAfterRageQuit) = runCmd startedCtx ["LEAVE", "Cat", "sec-C"]
+            
+            reply `shouldBe` "ACK"
+            -- LEAVE followed immediately by GAMEOVER with the current scores
+            bcasts `shouldBe` [ "table-1 LEAVE Cat"
+                                , "table-1 GAMEOVER 0 0 0 0"
+                                ]
+                                
+            -- Verify the table was completely purged from the server memory
+            let (listReply, _, _) = runCmd ctxAfterRageQuit ["LIST"]
+            listReply `shouldBe` "[]"
