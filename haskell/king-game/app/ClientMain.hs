@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{- HLINT ignore "Use <$>" -}
 module Main where
 
 import Control.Monad
@@ -40,16 +41,16 @@ class ContextAwareAgent a where
 
 -- | The Agent Thread: Blocks until the network asks for a decision, then thinks.
 runAgentThread :: ContextAwareAgent a => BotBrain -> a -> IO ()
-runAgentThread brain initialState = loop initialState
+runAgentThread brain = loop
   where
     loop agentState = do
         (action, game) <- atomically $ do
             act <- takeTMVar (envActionReq brain)
             g   <- readTVar (envGameState brain)
             return (act, g)
-            
+
         (decisionStr, newAgentState) <- decideAction action game agentState
-        
+
         atomically $ putTMVar (envActionRsp brain) decisionStr
         loop newAgentState
 
@@ -57,20 +58,20 @@ runAgentThread brain initialState = loop initialState
 networkLoop :: (Sender s, Receiver s, Receiver r) => Socket z r -> Socket z s -> BotBrain -> KingGame -> ZMQ z ()
 networkLoop info srv brain game = do
     (action, game') <- runStateT (updateGame srv info 100) game
-    
+
     -- Sync objective game state to the bridge
     liftIO $ atomically $ writeTVar (envGameState brain) game'
-    
+
     case action of
         KOver msg -> liftIO $ putStrLn $ "Game has ended: " ++ msg
         KWait     -> networkLoop info srv brain game'
         _         -> do
             -- Request a decision from the Agent thread
             liftIO $ atomically $ putTMVar (envActionReq brain) action
-            
+
             -- Wait for the Agent to reply
             decisionStr <- liftIO $ atomically $ takeTMVar (envActionRsp brain)
-            
+
             -- Execute and recurse
             _ <- executeActionS srv decisionStr
             networkLoop info srv brain game'
@@ -85,7 +86,7 @@ runGameS srv_addr sub_addr usrname passwrd initialAgent = do
         return $ BotBrain gState req rsp
 
     -- Run both threads simultaneously
-    concurrently_ 
+    concurrently_
         (runAgentThread brain initialAgent)
         (runZMQ $ do
             srv <- socket Req
@@ -103,7 +104,7 @@ runGameS srv_addr sub_addr usrname passwrd initialAgent = do
 ----------------------------------------------------------------------------------
 -- 4. A Concrete Agent Implementation (Replacing KingBotAgent)
 ----------------------------------------------------------------------------------
-data SimpleBot = SimpleBot { sName :: String }
+newtype SimpleBot = SimpleBot { sName :: String }
 
 instance ContextAwareAgent SimpleBot where
     decideAction action game state = do
@@ -118,20 +119,19 @@ instance ContextAwareAgent SimpleBot where
 
 -- Helper to safely pick the first available valid card using the new GameRules
 pickCard :: KingGame -> BS.ByteString
-pickCard game = 
-    let hand  = map parseCard $ roundCards game
+pickCard game =
+    let hand  = roundCards game
         hands = gameHands game
     in case hands of
-        (KingHand (Right rule) tableCards _ _ : _) -> 
-            let table = map parseCard tableCards
-            in case find (isValidPlay rule table hand) hand of
-                Just validCard -> mkPlayStr game "PLAY" (Just $ unparseCard validCard)
-                Nothing        -> mkPlayStr game "PLAY" (Just $ unparseCard $ head hand) -- Fallback
-        _ -> mkPlayStr game "PLAY" (Just $ unparseCard $ head hand)
+        (KingHand (Right rule) table _ _ : _) ->
+            case find (isValidPlay rule table hand) hand of
+                Just validCard -> mkPlayStr game "PLAY" (Just validCard)
+                Nothing        -> mkPlayStr game "PLAY" (Just $ head hand) -- Fallback
+        _ -> mkPlayStr game "PLAY" (Just $ head hand)
 
 -- Helper to pick the first available rule
 pickRule :: KingGame -> BS.ByteString
-pickRule game = 
+pickRule game =
     case gameHands game of
         (KingHand (Left (r:_)) _ _ _ : _) -> mkPlayStr game "GAME" (Just $ show r)
         _ -> mkPlayStr game "GAME" (Just "POSITIVA")
