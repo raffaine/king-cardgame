@@ -74,6 +74,7 @@ data Card = Card { cardRank :: Rank, cardSuit :: Suit }
 
 -- | Converts the wire string format (e.g., "TC", "AH") into our robust ADT
 parseCard :: KingCard -> Card
+parseCard ['1', '0', s] = Card R10 (parseSuit s)    -- Legacy support
 parseCard [r, s] = Card (parseRank r) (parseSuit s)
   where
     parseRank '2' = R2
@@ -90,20 +91,21 @@ parseCard [r, s] = Card (parseRank r) (parseSuit s)
     parseRank 'K' = King
     parseRank 'A' = Ace
     parseRank _   = error "Invalid Rank"
-
-    parseSuit 'C' = Clubs
-    parseSuit 'D' = Diamonds
-    parseSuit 'H' = Hearts
-    parseSuit 'S' = Spades
-    parseSuit _   = error "Invalid Suit"
 parseCard _ = error "Invalid Card Format"
+
+parseSuit :: Char -> Suit
+parseSuit 'C' = Clubs
+parseSuit 'D' = Diamonds
+parseSuit 'H' = Hearts
+parseSuit 'S' = Spades
+parseSuit _   = error "Invalid Suit"
 
 -- | Converts our ADT back to the wire format if needed
 unparseCard :: Card -> KingCard
-unparseCard (Card r s) = [rankChar r, suitChar s]
+unparseCard (Card r s) = rankStr r ++ suitStr s
   where
-    rankChar R2 = '2'; rankChar R3 = '3'; rankChar R4 = '4'; rankChar R5 = '5'
-    rankChar R6 = '6'; rankChar R7 = '7'; rankChar R8 = '8'; rankChar R9 = '9'
-    rankChar R10 = 'T'; rankChar Jack = 'J'; rankChar Queen = 'Q'; rankChar King = 'K'; rankChar Ace = 'A'
+    rankStr R2 = "2"; rankStr R3 = "3"; rankStr R4 = "4"; rankStr R5 = "5"
+    rankStr R6 = "6"; rankStr R7 = "7"; rankStr R8 = "8"; rankStr R9 = "9"
+    rankStr R10 = "10"; rankStr Jack = "J"; rankStr Queen = "Q"; rankStr King = "K"; rankStr Ace = "A"
     
-    suitChar Clubs = 'C'; suitChar Diamonds = 'D'; suitChar Hearts = 'H'; suitChar Spades = 'S'
+    suitStr Clubs = "C"; suitStr Diamonds = "D"; suitStr Hearts = "H"; suitStr Spades = "S"

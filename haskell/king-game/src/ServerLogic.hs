@@ -378,6 +378,7 @@ handleCommand ctx ["PLAY", usr, sec, cardStr] = do
 
                                         bcast = [ tId ++ " PLAY " ++ cardStr
                                                 , endRoundBcast
+                                                , tId ++ " TURN " ++ winnerName
                                                 ]
                                         -- Calculate the global remaining pool and check if hand ends
                                         remainingPool = concat (Map.elems newHandsMap)
@@ -430,7 +431,11 @@ handleCommand ctx ["PLAY", usr, sec, cardStr] = do
                                                     ctx'' = ctx' { scTables = Map.insert tId finalTable (scTables ctx') }
 
                                                     -- Prepare STARTHAND message for the next hand
-                                                    bcast'= bcast ++ [ endHandBCast, msgStartHand ]
+                                                    bcast'= [ tId ++ " PLAY " ++ cardStr
+                                                            , endRoundBcast
+                                                            , endHandBCast
+                                                            , msgStartHand
+                                                            ]
                                                 return ("ACK", bcast', ctx'')
 
                 _ -> return ("ERROR Game is not in trick-playing phase", [], ctx)
