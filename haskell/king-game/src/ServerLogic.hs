@@ -8,11 +8,12 @@ module ServerLogic
     , KingCard
     , emptyServerContext
     , handleCommand
+    , finishList
     ) where
 
 import qualified Data.Map.Strict as Map
 import Data.List (intercalate, find, elemIndex)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Control.Monad (when)
 
 import KingTypes (KingRule(..), KingCard, readRule, isPositiva, allNegativeRules, startingRules)
@@ -65,10 +66,15 @@ data ServerTable = ServerTable
     , tTotalScores    :: [Int]                         -- Tracls Total accumulated points
     } deriving (Show, Eq)
 
+-- Polling State (For Listing users)
+data PollingState = NotPolling | Polling [String] | Finished [String]
+    deriving (Show, Eq)
+
 -- | Replaces global dicts g_users, g_tables, g_players
 data ServerContext = ServerContext
-    { scUsers  :: Map.Map String ServerUser
-    , scTables :: Map.Map String ServerTable
+    { scUsers  :: Map.Map String ServerUser     -- Tracks authorized users
+    , scTables :: Map.Map String ServerTable    -- Tracks available tables
+    , scPoll   :: PollingState                  -- Tracks the LISTUSERS roll call
     } deriving (Show, Eq)
 
 -- | Calculates the available rules for a specific player based on the table's history log
@@ -94,7 +100,7 @@ maybeToEither :: e -> Maybe a -> Either e a
 maybeToEither err = maybe (Left err) Right
 
 emptyServerContext :: ServerContext
-emptyServerContext = ServerContext Map.empty Map.empty
+emptyServerContext = ServerContext Map.empty Map.empty NotPolling
 
 -- | Checks if a user is authorized based on their name and channel.
 isAuthorized :: ServerContext -> String -> String -> Bool
@@ -161,6 +167,18 @@ addScore :: Int -> Int -> [Int] -> [Int]
 addScore targetIdx points = zipWith (\idx currentScore -> if idx == targetIdx then currentScore + points else currentScore) [0..3]
 
 ----------------------------------------------------------------------
+-- FINISHLIST (Internal command to inform LISTUSER timer ended)
+----------------------------------------------------------------------
+finishList :: ServerContext -> (String, [String], ServerContext)
+finishList ctx =
+    case scPoll ctx of
+        Polling activeUsers ->
+            let bcasts = ["user-list-channel " ++ unwords activeUsers]
+                ctx' = ctx { scPoll = Finished activeUsers }
+            in ("ACK", bcasts, ctx')
+        _ -> ("ERROR No active poll", [], ctx)
+
+----------------------------------------------------------------------
 -- | The core pure state machine.
 -- Takes: Context -> InjectedID -> CommandWords
 -- Returns: (DirectReply, OptionalBroadcast, NewContext)
@@ -205,14 +223,14 @@ handleCommand ctx ["TABLE", usr, chan]
 ----------------------------------------------------------------------
 handleCommand ctx ["LIST"] = do
     let tablesList = Map.toList (scTables ctx)
-        
+
         formatTable (tId, table) =
             "{\"name\": \"" ++ tId ++ "\", \"players\": [" ++
             intercalate ", " (map (\p -> "\"" ++ pName p ++ "\"") (tPlayers table)) ++
             "]}"
-            
+
         jsonStr = "[" ++ intercalate ", " (map formatTable tablesList) ++ "]"
-        
+
     return (jsonStr, [], ctx)
 
 ----------------------------------------------------------------------
@@ -266,32 +284,32 @@ handleCommand ctx ["GAME", usr, sec, ruleStr] = do
                     allowedRules = availableRulesForPlayer (tPlayedHands table) usr
                 in if rule `notElem` allowedRules
                 then return ("ERROR Rule not available for this player at this time", [], ctx)
-                else if isPositiva rule 
+                else if isPositiva rule
                     then do
                         let nextTurn = (pIndex + 1) `mod` 4
                             nextPlayerName = pName (tPlayers table !! nextTurn)
-                            updatedTable = table 
+                            updatedTable = table
                                 { tPhase = Bidding []
                                 , tActiveTurn = nextTurn
                                 -- Don't add to Op-Log as Trump hasn't been decided
                                 }
                             ctx' = ctx { scTables = Map.insert tId updatedTable (scTables ctx) }
-                        
+
                         -- Emit EXACTLY what Python did
                         return ("ACK", [tId ++ " BID " ++ nextPlayerName], ctx')
-                        
+
                 -- IF IT IS A NEGATIVE RULE: Go straight to the first trick!
                 else do
                     let starterIdx = tHandStarter table
                         starterName = pName (tPlayers table !! starterIdx)
-                        updatedTable = table 
-                            { tPhase = PlayingTrick [] 
+                        updatedTable = table
+                            { tPhase = PlayingTrick []
                             , tActiveTurn = starterIdx
                             -- Add to Op-Log
                             , tPlayedHands = tPlayedHands table ++ [(usr, rule)]
                             }
                         ctx' = ctx { scTables = Map.insert tId updatedTable (scTables ctx) }
-                        
+
                         bcasts = [ tId ++ " GAME " ++ ruleStr
                                  , tId ++ " TURN " ++ starterName
                                  ]
@@ -568,7 +586,7 @@ handleCommand ctx ["LEAVE", usr, sec] = do
         Right (tId, table, _pIndex) -> do
             let isNotStarted = tPhase table == Lobby
                 leaveBcast = tId ++ " LEAVE " ++ usr
-            
+
             if isNotStarted
             then do
                 -- Safely remove the player from the lobby
@@ -580,11 +598,77 @@ handleCommand ctx ["LEAVE", usr, sec] = do
                 -- Game was already running! Destroy the table and boot everyone.
                 let scoreStr = unwords (map show (tTotalScores table))
                     bcasts = [ leaveBcast
-                             , tId ++ " GAMEOVER " ++ scoreStr 
+                             , tId ++ " GAMEOVER " ++ scoreStr
                              ]
                     -- Remove the table entirely from the server context
                     ctx' = ctx { scTables = Map.delete tId (scTables ctx) }
                 return ("ACK", bcasts, ctx')
+
+----------------------------------------------------------------------
+-- LISTUSERS (No arguments)
+----------------------------------------------------------------------
+handleCommand ctx ["LISTUSERS"] = do
+    case scPoll ctx of
+        Polling _ -> return ("ERROR Listing in progress", [], ctx)
+        _ -> do
+            -- Broadcast CONFIRM_AVAILABLE to every connected user's private channel
+            let allUsers = Map.elems (scUsers ctx)
+                bcasts = map ((++ " CONFIRM_AVAILABLE") . uChannel) allUsers
+                ctx' = ctx { scPoll = Polling [] }
+            return ("ACK", bcasts, ctx')
+
+----------------------------------------------------------------------
+-- AVAILABLE <username> <channel>
+----------------------------------------------------------------------
+handleCommand ctx ["AVAILABLE", usr, chan]
+    | not (isAuthorized ctx usr chan) = pure ("ERROR User not authorized", [], ctx)
+    | otherwise = do
+        case scPoll ctx of
+            Polling activeUsers -> do
+                -- Add the user to the active list if they aren't already there
+                let newActive = if usr `elem` activeUsers then activeUsers else activeUsers ++ [usr]
+                    ctx' = ctx { scPoll = Polling newActive }
+                return ("ACK", [], ctx')
+            _ -> return ("ERROR Timeout on response", [], ctx)
+
+----------------------------------------------------------------------
+-- MATCH <username> <channel> <p2> <p3> <p4>
+----------------------------------------------------------------------
+handleCommand ctx ["MATCH", usr, chan, p2, p3, p4]
+    | not (isAuthorized ctx usr chan) = pure ("ERROR User not authorized", [], ctx)
+    | otherwise = do
+        case scPoll ctx of
+            Finished activeUsers -> do
+                let requestedOthers = [p2, p3, p4]
+                    validOthers = filter (`elem` activeUsers) requestedOthers
+
+                if length validOthers == 3
+                then do
+                    -- All requested players are available. Generate a new table ID!
+                    tId <- generateId
+
+                    -- Create an empty Lobby. (The creator still needs to send JOIN!)
+                    let newTable = ServerTable
+                            { tName = tId
+                            , tPlayers = []
+                            , tPhase = Lobby
+                            , tActiveTurn = 0
+                            , tHandStarter = 0
+                            , tPlayedHands = []
+                            , tHands = Map.empty
+                            , tHandScores = [0, 0, 0, 0]
+                            , tTotalScores = [0, 0, 0, 0]
+                            }
+                        ctx' = ctx { scTables = Map.insert tId newTable (scTables ctx) }
+
+                        -- Retrieve the private channels for the 3 invited players
+                        otherUsers = mapMaybe (`Map.lookup` scUsers ctx') validOthers
+                        bcasts = map (\srvUsr -> uChannel srvUsr ++ " ASKJOIN " ++ tId) otherUsers
+
+                    return (tId, bcasts, ctx')
+                else
+                    return ("ERROR You must inform 3 or 4 other valid players", [], ctx)
+            _ -> return ("ERROR No recent active user list", [], ctx)
 
 ----------------------------------------------------------------------
 -- FALLBACK

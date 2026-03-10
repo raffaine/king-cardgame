@@ -684,6 +684,37 @@ main = hspec $ do
                 let (replyHand, _, _) = runCmd ctxTurn1 ["GETHAND", "Alice", "sec-A"]
                 replyHand `shouldBe` "[\"AH\", \"2C\"]"
 
+        describe "Trick Progression (Winner leads next trick)" $ do
+            -- A 2-card micro-deck to test the transition between Trick 1 and Trick 2
+            let deck = [ ["2H", "3H"], ["7H", "4H"], ["4C", "5C"], ["KH", "8D"] ]
+                (ctxStarted, _) = setupStartedGame [deck]
+
+                -- Start the hand with Alice picking VAZA. Alice leads the first trick.
+                (_, _, c1) = runCmd ctxStarted ["GAME", "Alice", "sec-A", "VAZA"]
+                
+                -- Play the first 3 cards of Trick 1
+                (_, _, c2) = runCmd c1 ["PLAY", "Alice", "sec-A", "2H"]
+                (_, _, c3) = runCmd c2 ["PLAY", "Bob", "sec-B", "7H"]
+                (_, _, c4) = runCmd c3 ["PLAY", "Cat", "sec-C", "4C"]
+                
+            it "broadcasts ENDROUND and TURN to the winner, making them the active player" $ do
+                -- Dave plays the 4th card, completing Trick 1
+                let (reply, bcasts, c5) = runCmd c4 ["PLAY", "Dave", "sec-D", "KH"]                
+                reply `shouldBe` "ACK"
+                
+                -- Dave won the trick because KH is the highest Heart (the led suit).
+                bcasts `shouldContain` ["table-1 PLAY KH"]
+                bcasts `shouldContain` ["table-1 ENDROUND Dave -20"] 
+                bcasts `shouldContain` ["table-1 TURN Dave"]
+                                    
+                -- Prove Dave is now the active player for Trick 2 (Instead of Bob, the next after Alice)
+                let (replyBob, _, _) = runCmd c5 ["PLAY", "Dave", "sec-D", "8D"]
+                replyBob `shouldBe` "ACK"
+                
+                -- Prove Alice (the original starter) cannot play out of turn
+                let (replyAlice, _, _) = runCmd c5 ["PLAY", "Alice", "sec-A", "3H"]
+                replyAlice `shouldContain` "ERROR"
+
         describe "Trick Completion and Winner Evaluation" $ do
             it "evaluates the trick after 4 cards, awards points, and gives the winner the next turn" $ do
                 -- Play out a full trick of Hearts
@@ -731,6 +762,7 @@ main = hspec $ do
                 -- The sequence is critical: clients need to see the card hit the table BEFORE the trick resolves
                 bcastsT4 `shouldBe` [ "table-1 PLAY 5H"
                                     , "table-1 ENDROUND Dave -20" -- Dave wins the trick with the highest Heart and gets -20 points in Vaza
+                                    , "table-1 TURN Dave"
                                     ]
 
         describe "Hand Completion and Multiple Broadcasts (Short-Circuit via RKing)" $ do
@@ -857,3 +889,81 @@ main = hspec $ do
             -- Verify the table was completely purged from the server memory
             let (listReply, _, _) = runCmd ctxAfterRageQuit ["LIST"]
             listReply `shouldBe` "[]"
+
+    describe "Global Matchmaking (LISTUSERS, AVAILABLE, FINISHLIST, MATCH)" $ do
+        let c0 = emptyServerContext
+            -- Authorize 5 players so the server knows their channels
+            (_, _, c1) = runCmd' c0 ["AUTHORIZE", "Alice", "pass"] ["chan-A"]
+            (_, _, c2) = runCmd' c1 ["AUTHORIZE", "Bob", "pass"] ["chan-B"]
+            (_, _, c3) = runCmd' c2 ["AUTHORIZE", "Cat", "pass"] ["chan-C"]
+            (_, _, c4) = runCmd' c3 ["AUTHORIZE", "Dave", "pass"] ["chan-D"]
+            (_, _, ctxAuth) = runCmd' c4 ["AUTHORIZE", "Eve", "pass"] ["chan-E"]
+
+        it "LISTUSERS: starts the poll and asks everyone if they are available" $ do
+            let (reply, bcasts, _) = runCmd ctxAuth ["LISTUSERS"]
+            
+            reply `shouldBe` "ACK"
+            -- It must ping every single authorized user's channel
+            bcasts `shouldContain` ["chan-A CONFIRM_AVAILABLE"]
+            bcasts `shouldContain` ["chan-B CONFIRM_AVAILABLE"]
+            bcasts `shouldContain` ["chan-C CONFIRM_AVAILABLE"]
+            bcasts `shouldContain` ["chan-D CONFIRM_AVAILABLE"]
+            bcasts `shouldContain` ["chan-E CONFIRM_AVAILABLE"]
+
+        it "AVAILABLE: records a user if a poll is active, rejects if timed out" $ do
+            let (_, _, ctxPolling) = runCmd ctxAuth ["LISTUSERS"]
+            
+            -- Bob and Cat reply in time
+            let (replyBob, _, cB) = runCmd ctxPolling ["AVAILABLE", "Bob", "chan-B"]
+                (replyCat, _, _)  = runCmd cB ["AVAILABLE", "Cat", "chan-C"]
+                
+            replyBob `shouldBe` "ACK"
+            replyCat `shouldBe` "ACK"
+            
+            -- If Eve tries to reply to the base context (where no poll is running), she is rejected
+            let (replyEveTimeout, _, _) = runCmd ctxAuth ["AVAILABLE", "Eve", "chan-E"]
+            replyEveTimeout `shouldBe` "ERROR Timeout on response"
+
+        it "FINISHLIST: ends the poll and broadcasts the active users" $ do
+            let (_, _, ctxPolling) = runCmd ctxAuth ["LISTUSERS"]
+                (_, _, cB) = runCmd ctxPolling ["AVAILABLE", "Bob", "chan-B"]
+                (_, _, cC) = runCmd cB ["AVAILABLE", "Cat", "chan-C"]
+                (_, _, cD) = runCmd cC ["AVAILABLE", "Dave", "chan-D"]
+                
+                -- The server timer pops and triggers this internal command
+                (reply, bcasts, _) = finishList cD
+                
+            reply `shouldBe` "ACK"
+            -- The server broadcasts the collected list to the global matchmaking channel
+            bcasts `shouldBe` ["user-list-channel Bob Cat Dave"]
+
+        it "MATCH: creates a table and sends ASKJOIN to the requested active players" $ do
+            let (_, _, ctxPolling) = runCmd ctxAuth ["LISTUSERS"]
+                (_, _, cB) = runCmd ctxPolling ["AVAILABLE", "Bob", "chan-B"]
+                (_, _, cC) = runCmd cB ["AVAILABLE", "Cat", "chan-C"]
+                (_, _, cD) = runCmd cC ["AVAILABLE", "Dave", "chan-D"]
+                -- The list finishes
+                (_, _, ctxReady) = finishList cD
+                
+                -- Alice asks to form a match with Bob, Cat, and Dave
+                (replyMatch, bcastsMatch, _) = runCmd' ctxReady ["MATCH", "Alice", "chan-A", "Bob", "Cat", "Dave"] ["table-new"]
+
+            -- The reply should be the generated table ID
+            replyMatch `shouldBe` "table-new"
+            
+            -- The server must send direct messages to Bob, Cat, and Dave inviting them to the new table
+            bcastsMatch `shouldContain` ["chan-B ASKJOIN table-new"]
+            bcastsMatch `shouldContain` ["chan-C ASKJOIN table-new"]
+            bcastsMatch `shouldContain` ["chan-D ASKJOIN table-new"]
+            
+            -- It should NOT invite Alice (she is already the creator) or Eve (she wasn't invited/available)
+            bcastsMatch `shouldNotContain` ["chan-A ASKJOIN"]
+            bcastsMatch `shouldNotContain` ["chan-E ASKJOIN"]
+
+        it "MATCH: fails if players are not in the active list or wrong count" $ do
+            let (_, _, ctxPolling) = runCmd ctxAuth ["LISTUSERS"]
+                (_, _, ctxReady) = finishList ctxPolling-- Finished with NO available players
+                
+                (replyFail, _, _) = runCmd ctxReady ["MATCH", "Alice", "chan-A", "Bob", "Cat", "Dave"]
+                
+            replyFail `shouldBe` "ERROR You must inform 3 or 4 other valid players"
