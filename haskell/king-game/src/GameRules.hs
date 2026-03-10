@@ -89,7 +89,7 @@ calculateScore rule round cards = case rule of
     R2Ultimas -> if round >= 12 then -90 else 0
     RCopas -> -(20 * length (filter (\c -> cardSuit c == Hearts) cards))
     RKing -> if Card King Hearts `elem` cards then -160 else 0
-    _ -> if isNothing (getPositivaSuit rule) then 0 else 25
+    _ -> 25 -- Positivas always award 25
 
 -- | Determines if a hand is mathematically over based on the remaining cards in play.
 isHandComplete :: KingRule -> [KingCard] -> Bool

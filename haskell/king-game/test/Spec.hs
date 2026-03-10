@@ -49,7 +49,6 @@ runCmd' ctx cmd ids = runCmd'' ctx cmd ids []
 runCmd :: ServerContext -> [String] -> (String, [String], ServerContext)
 runCmd ctx cmd = runCmd' ctx cmd []
 
-
 -- 4. Our setup function is now breathtakingly clean
 setupStartedGame :: [[[KingCard]]] -> (ServerContext, String)
 setupStartedGame decks =
@@ -67,6 +66,59 @@ setupStartedGame decks =
         (_, _, cD)  = runCmd' cJ3 ["AUTHORIZE", "Dave", "pass"] ["chan-D"]
         (_, _, cJ4) = runCmd'' cD ["JOIN", "Dave", "chan-D", "table-1"] ["sec-D"] decks
     in (cJ4, "table-1")
+
+-- This helper function runs the command and CRASHES if it fails
+runStep context cmd envDecks = 
+    let (reply, _, newCtx) = runCmd'' context cmd [] envDecks
+    in if reply == "ACK" 
+        then newCtx
+        else error $ "\n\n!!! STATE MACHINE BROKE !!!\n" 
+                    ++ "Attempted Command: " ++ unwords cmd ++ "\n"
+                    ++ "Server Rejected With: " ++ reply ++ "\n\n"
+
+playAuction :: ServerContext -> [(String, String, c)] -> Int -> ServerContext
+playAuction ctx players starterIdx =
+    let (p0Name, p0Sec, p0Card) = players !! (starterIdx `mod` 4)
+        (p1Name, p1Sec, p1Card) = players !! ((starterIdx + 1) `mod` 4)
+        (p2Name, p2Sec, p2Card) = players !! ((starterIdx + 2) `mod` 4)
+        (p3Name, p3Sec, p3Card) = players !! ((starterIdx + 3) `mod` 4)
+
+        -- Define the sequence of commands and their environment payloads
+        auctionSteps = [ (["BID", p1Name, p1Sec, "0"], [])
+                       , (["BID", p2Name, p2Sec, "0"], [])
+                       , (["BID", p3Name, p3Sec, "0"], [])
+                       , (["DECIDE", p0Name, p0Sec, "False"], [])
+                       , (["TRUMP", p0Name, p0Sec, ""], [])
+                       ]
+                       
+    -- Fold over the list, feeding the resulting state of each step into the next
+    in foldl (\currentCtx (cmd, env) -> runStep currentCtx cmd env) ctx auctionSteps
+
+-- We add `nextDeck` as an argument
+playMicroHand :: ServerContext -> [(String, String, KingCard)] -> Int -> [Char] -> [[KingCard]] -> ServerContext
+playMicroHand ctx players starterIdx ruleStr nextDeck =
+    let (p0Name, p0Sec, p0Card) = players !! (starterIdx `mod` 4)
+        (p1Name, p1Sec, p1Card) = players !! ((starterIdx + 1) `mod` 4)
+        (p2Name, p2Sec, p2Card) = players !! ((starterIdx + 2) `mod` 4)
+        (p3Name, p3Sec, p3Card) = players !! ((starterIdx + 3) `mod` 4)
+
+        -- 1. Apply the GAME command
+        ctxAfterGame = runStep ctx ["GAME", p0Name, p0Sec, ruleStr] []
+        
+        -- 2. Conditionally fold the Auction steps if POSITIVA
+        ctxBeforePlay = if ruleStr == "POSITIVA" 
+                        then playAuction ctxAfterGame players starterIdx 
+                        else ctxAfterGame
+
+        -- 3. Define the PLAY commands
+        playSteps = [ (["PLAY", p0Name, p0Sec, p0Card], [])
+                    , (["PLAY", p1Name, p1Sec, p1Card], [])
+                    , (["PLAY", p2Name, p2Sec, p2Card], [])
+                    , (["PLAY", p3Name, p3Sec, p3Card], [nextDeck])
+                    ]
+                    
+    -- Fold the PLAY commands over the prepared state
+    in foldl (\currentCtx (cmd, env) -> runStep currentCtx cmd env) ctxBeforePlay playSteps
 
 main :: IO ()
 main = hspec $ do
@@ -171,6 +223,10 @@ main = hspec $ do
             it "awards the trick to the highest led suit if no trump is played" $ do
                 -- assert Positiva('H').play_round(['5C', '2S', 'AC', 'TC']) == (2, 25)
                 evaluateTrick RPositivaH 1 ["5C", "2S", "AC", "TC"] `shouldBe` (2, 25)
+
+            it "awards the trick to the highest led suit if Positiva has no trump" $ do
+                -- assert Positiva('').play_round(['5C', '2H', 'AD', 'TS']) == (0, 25)
+                evaluateTrick RPositiva 1 ["5C", "2H", "AD", "TS"] `shouldBe` (0, 25)
 
         describe "GameRules: Hand Exhaustion (isHandComplete)" $ do      
             it "ends RKing immediately when the King of Hearts is missing from remaining cards" $ do
@@ -459,7 +515,7 @@ main = hspec $ do
                 -- Alice calls it correctly
                 let (replyA, bcastA, _) = runCmd ctxStarted ["GAME", "Alice", "sec-A", "COPAS"]
                 replyA `shouldBe` "ACK"
-                bcastA `shouldBe` ["table-1 GAME COPAS"]
+                bcastA `shouldBe` ["table-1 GAME COPAS", "table-1 TURN Alice"]
 
             it "behaviorally transitions the state so GAME cannot be called twice" $ do
                 let (_, _, ctxPlaying) = runCmd ctxStarted ["GAME", "Alice", "sec-A", "COPAS"]
@@ -498,37 +554,12 @@ main = hspec $ do
 
                 -- Helper array to map turn index to the player's credentials and their micro-deck card
                 players = [("Alice", "sec-A", "2H"), ("Bob", "sec-B", "4C"), ("Cat", "sec-C", "7D"), ("Dave", "sec-D", "9S")]
-
-                -- We add `nextDeck` as an argument
-                playMicroHand ctx starterIdx ruleStr nextDeck =
-                    let (p0Name, p0Sec, p0Card) = players !! (starterIdx `mod` 4)
-                        (p1Name, p1Sec, p1Card) = players !! ((starterIdx + 1) `mod` 4)
-                        (p2Name, p2Sec, p2Card) = players !! ((starterIdx + 2) `mod` 4)
-                        (p3Name, p3Sec, p3Card) = players !! ((starterIdx + 3) `mod` 4)
-
-                        -- This inner function runs the command and CRASHES if it fails
-                        runStep context cmd envDecks = 
-                            let (reply, _, newCtx) = runCmd'' context cmd [] envDecks
-                            in if reply == "ACK" 
-                               then newCtx
-                               else error $ "\n\n!!! STATE MACHINE BROKE !!!\n" 
-                                         ++ "Attempted Command: " ++ unwords cmd ++ "\n"
-                                         ++ "Server Rejected With: " ++ reply ++ "\n\n"
-
-                        cG = runStep ctx ["GAME", p0Name, p0Sec, ruleStr] []
-                        c1 = runStep cG ["PLAY", p0Name, p0Sec, p0Card] []
-                        c2 = runStep c1 ["PLAY", p1Name, p1Sec, p1Card] []
-                        c3 = runStep c2 ["PLAY", p2Name, p2Sec, p2Card] []
-                        
-                        -- The 4th play triggers ENDHAND and asks for a new deck. We inject it here!
-                        c4 = runStep c3 ["PLAY", p3Name, p3Sec, p3Card] [nextDeck]
-                    in c4
                 
                 -- We pass `dummyDeck` in as the next deck for every round
-                e1 = playMicroHand ctxStarted 0 "POSITIVA" dummyDeck
-                e2 = playMicroHand e1         1 "HOMENS"   dummyDeck
-                e3 = playMicroHand e2         2 "MULHERES" dummyDeck
-                e4 = playMicroHand e3         3 "VAZA"     dummyDeck
+                e1 = playMicroHand ctxStarted players 0 "POSITIVA" dummyDeck
+                e2 = playMicroHand e1         players 1 "HOMENS"   dummyDeck
+                e3 = playMicroHand e2         players 2 "MULHERES" dummyDeck
+                e4 = playMicroHand e3         players 3 "VAZA"     dummyDeck
             
             it "forces a player to pick a negative rule if they already used their Positiva" $ do
                 -- Hand 5: Back to Alice. She tries to play POSITIVA again.
@@ -547,7 +578,68 @@ main = hspec $ do
                 let (replySuccess, _, c2) = runCmd e4 ["GAME", "Alice", "sec-A", "COPAS"]
                 replySuccess `shouldBe` "ACK"
 
+        describe "Positiva Auction Lifecycle (BID, DECIDE, TRUMP)" $ do
+            let dummyDeck = [ ["2H", "3H"], ["4C", "5C"], ["6D", "7D"], ["8S", "9S"] ]
+                (ctxStart, _) = setupStartedGame [dummyDeck]
                 
+                -- Alice calls POSITIVA. 
+                (replyGame, bcastsGame, ctxBidding) = runCmd ctxStart ["GAME", "Alice", "sec-A", "POSITIVA"]
+
+            it "starts the bidding by asking the next player for a bid" $ do
+                replyGame `shouldBe` "ACK"
+                -- Python protocol strictly emits just the BID request here
+                bcastsGame `shouldBe` ["table-1 BID Bob"]
+
+            it "rejects unauthorized or out-of-turn bids" $ do
+                let (replyBadSec, _, _) = runCmd ctxBidding ["BID", "Bob", "wrong-sec", "2"]
+                replyBadSec `shouldContain` "ERROR"
+                
+                let (replyEarly, _, _)  = runCmd ctxBidding ["BID", "Cat", "sec-C", "2"]
+                replyEarly `shouldContain` "ERROR"
+
+            it "loops multi-round bidding until 3 players pass (Red Flag Test)" $ do
+                -- Round 1: Bob bids 2
+                let (_, bcastsB1, c1) = runCmd ctxBidding ["BID", "Bob", "sec-B", "2"]
+                bcastsB1 `shouldBe` ["table-1 BIDS 2", "table-1 BID Cat"]
+                
+                -- Cat passes (0)
+                let (_, bcastsC1, c2) = runCmd c1 ["BID", "Cat", "sec-C", "0"]
+                bcastsC1 `shouldBe` ["table-1 BIDS 0", "table-1 BID Dave"]
+                
+                -- Dave bids 3
+                let (_, bcastsD1, c3) = runCmd c2 ["BID", "Dave", "sec-D", "3"]
+                
+                -- RED FLAG: Because Bob bid 2, and Dave raised to 3, the auction is NOT over!
+                -- It must loop back to Bob to see if he wants to raise or pass.
+                bcastsD1 `shouldBe` ["table-1 BIDS 3", "table-1 BID Bob"]
+                
+                -- Round 2: Bob gives up and passes
+                let (replyB2, bcastsB2, _) = runCmd c3 ["BID", "Bob", "sec-B", "0"]
+                replyB2 `shouldBe` "ACK"
+                
+                -- Now that Bob, Cat, and Dave have all either passed or placed the highest bid, 
+                -- the auction ends and Alice must DECIDE.
+                bcastsB2 `shouldBe` ["table-1 BIDS 0", "table-1 DECIDE Alice"]
+
+            it "allows the caller to DECIDE and the winner to choose TRUMP" $ do
+                -- We quickly simulate a 1-round auction where Dave wins with 3.
+                let (_, _, c1) = runCmd ctxBidding ["BID", "Bob", "sec-B", "0"]
+                    (_, _, c2) = runCmd c1 ["BID", "Cat", "sec-C", "0"]
+                    (_, _, c3) = runCmd c2 ["BID", "Dave", "sec-D", "3"]
+                
+                -- Alice decides to ACCEPT Dave's bid
+                let (replyDecide, bcastsDecide, c4) = runCmd c3 ["DECIDE", "Alice", "sec-A", "True"]
+                replyDecide `shouldBe` "ACK"
+                bcastsDecide `shouldBe` ["table-1 CHOOSETRUMP Dave"]
+                
+                -- Dave picks Hearts ('H')
+                let (replyTrump, bcastsTrump, c5) = runCmd c4 ["TRUMP", "Dave", "sec-D", "H"]
+                replyTrump `shouldBe` "ACK"
+                bcastsTrump `shouldBe` ["table-1 GAME POSITIVA H", "table-1 TURN Alice"]
+                
+                -- Prove the state machine shifted to PlayingTrick by successfully playing the first card!
+                let (replyPlay, _, _) = runCmd c5 ["PLAY", "Alice", "sec-A", "2H"]
+                replyPlay `shouldBe` "ACK"
 
     ----------------------------------------------------------------------
     -- 7 SERVER LOGIC: TRICK PLAYING & RULE EVALUATION
@@ -682,44 +774,19 @@ main = hspec $ do
                 -- Helper array to map turn index to the player's credentials and their micro-deck card
                 players = [("Alice", "sec-A", "KH"), ("Bob", "sec-B", "4C"), ("Cat", "sec-C", "7D"), ("Dave", "sec-D", "9S")]
 
-                -- We add `nextDeck` as an argument
-                playMicroHand ctx starterIdx ruleStr nextDeck =
-                    let (p0Name, p0Sec, p0Card) = players !! (starterIdx `mod` 4)
-                        (p1Name, p1Sec, p1Card) = players !! ((starterIdx + 1) `mod` 4)
-                        (p2Name, p2Sec, p2Card) = players !! ((starterIdx + 2) `mod` 4)
-                        (p3Name, p3Sec, p3Card) = players !! ((starterIdx + 3) `mod` 4)
-
-                        -- This inner function runs the command and CRASHES if it fails
-                        runStep context cmd envDecks = 
-                            let (reply, _, newCtx) = runCmd'' context cmd [] envDecks
-                            in if reply == "ACK" 
-                               then newCtx
-                               else error $ "\n\n!!! STATE MACHINE BROKE !!!\n" 
-                                         ++ "Attempted Command: " ++ unwords cmd ++ "\n"
-                                         ++ "Server Rejected With: " ++ reply ++ "\n\n"
-
-                        cG = runStep ctx ["GAME", p0Name, p0Sec, ruleStr] []
-                        c1 = runStep cG ["PLAY", p0Name, p0Sec, p0Card] []
-                        c2 = runStep c1 ["PLAY", p1Name, p1Sec, p1Card] []
-                        c3 = runStep c2 ["PLAY", p2Name, p2Sec, p2Card] []
-                        
-                        -- The 4th play triggers ENDHAND and asks for a new deck. We inject it here!
-                        c4 = runStep c3 ["PLAY", p3Name, p3Sec, p3Card] [nextDeck]
-                    in c4
-                
                 -- We pass `dummyDeck` in as the next deck for every round
 
                 -- Play 9 hands instantly! 
                 -- Turn starter naturally advances: 0 -> 1 -> 2 -> 3 -> 0 -> 1 -> 2 -> 3 -> 0
-                e1 = playMicroHand ctxStart 0 "VAZA" dummyDeck
-                e2 = playMicroHand e1       1 "HOMENS" dummyDeck
-                e3 = playMicroHand e2       2 "MULHERES" dummyDeck
-                e4 = playMicroHand e3       3 "2ULTIMAS" dummyDeck
-                e5 = playMicroHand e4       0 "COPAS" dummyDeck
-                e6 = playMicroHand e5       1 "POSITIVA" dummyDeck
-                e7 = playMicroHand e6       2 "POSITIVA" dummyDeck
-                e8 = playMicroHand e7       3 "POSITIVA" dummyDeck
-                e9 = playMicroHand e8       0 "POSITIVA" dummyDeck
+                e1 = playMicroHand ctxStart players 0 "VAZA" dummyDeck      -- [-20 0 0 0]
+                e2 = playMicroHand e1       players 1 "HOMENS" dummyDeck    -- [-20 -30 0 0]
+                e3 = playMicroHand e2       players 2 "MULHERES" dummyDeck  -- [-20 -30 0 0]
+                e4 = playMicroHand e3       players 3 "2ULTIMAS" dummyDeck  -- [-20 -30 0 -90]
+                e5 = playMicroHand e4       players 0 "COPAS" dummyDeck     -- [-40 -30 0 -90]
+                e6 = playMicroHand e5       players 1 "POSITIVA" dummyDeck  -- [-40 -5 0 -90]
+                e7 = playMicroHand e6       players 2 "POSITIVA" dummyDeck  -- [-40 -5 25 -90]
+                e8 = playMicroHand e7       players 3 "POSITIVA" dummyDeck  -- [-40 -5 25 -65]
+                e9 = playMicroHand e8       players 0 "POSITIVA" dummyDeck  -- [-15 -5 25 -65]
                 -- Hand 9 naturally finished. Bob (Index 1) is up next for Hand 10.
                 
             it "broadcasts GAMEOVER instead of STARTHAND when the 10th and final hand resolves" $ do
@@ -736,5 +803,5 @@ main = hspec $ do
                 bcasts `shouldBe` [ "table-1 PLAY KH"
                                 , "table-1 ENDROUND Bob -160"
                                 , "table-1 ENDHAND [0 -160 0 0]"
-                                , "table-1 GAMEOVER Cat [-40 -190 0 -90]" -- Not ideal but needed (not ideal because test is peering into the rules to replicate server calculations)
+                                , "table-1 GAMEOVER Cat [-15 -165 25 -65]" -- Not ideal but needed (not ideal because test is peering into the rules to replicate server calculations)
                                 ]
