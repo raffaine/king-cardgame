@@ -11,6 +11,8 @@ dist-newstyle/
 *.hp
 *.eventlog
 
+## C++
+build/
 
 ## Python ignores
 *.pyc
