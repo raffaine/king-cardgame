@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ------------------------------------------------------------------
-# 1. Dependencies (vcpkg handles SDL and Vulkan)
+# Dependencies (vcpkg handles SDL and Vulkan)
 # ------------------------------------------------------------------
 find_package(SDL2 CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
@@ -15,7 +15,7 @@ find_program(CABAL_EXECUTABLE cabal REQUIRED)
 find_program(GHC_EXECUTABLE ghc REQUIRED)
 
 # ------------------------------------------------------------------
-# 2. Dynamically locate GHC's global include directory (for HsFFI.h)
+# Dynamically locate GHC's global include directory (for HsFFI.h)
 # ------------------------------------------------------------------
 execute_process(
     COMMAND ${GHC_EXECUTABLE} --print-libdir
@@ -37,7 +37,7 @@ get_filename_component(GHC_INCLUDE_DIR "${HSFFI_FILE}" DIRECTORY)
 message(STATUS "SUCCESS! Found HsFFI.h in: ${GHC_INCLUDE_DIR}")
 
 # ------------------------------------------------------------------
-# 2.5 Dynamically locate the Haskell RTS Library
+# Dynamically locate the Haskell RTS Library
 # ------------------------------------------------------------------
 # Hunt for the dynamically versioned libHSrts shared object
 file(GLOB_RECURSE RTS_LIBS "${GHC_LIBDIR}/*libHSrts-*.so")
@@ -56,7 +56,7 @@ else()
 endif()
 
 # ------------------------------------------------------------------
-# 3. Setup the Automated Cabal Build Target
+# Setup the Automated Cabal Build Target
 # ------------------------------------------------------------------
 # Convert the relative path '..' into a concrete absolute path
 get_filename_component(HASKELL_PROJECT_ROOT "${CMAKE_SOURCE_DIR}/../haskell/king-game" ABSOLUTE)
@@ -112,12 +112,60 @@ add_custom_target(haskell_backend ALL
 )
 
 # ------------------------------------------------------------------
-# 4. The C++ Executable Setup
+# Compile GLSL Shaders to SPIR-V
 # ------------------------------------------------------------------
-add_executable(KingGame src/main.cpp)
+find_program(GLSLC glslc)
+if(NOT GLSLC)
+    message(FATAL_ERROR "glslc not found! Please run: sudo apt install glslc")
+endif()
 
-# CRITICAL: Tell CMake it MUST build the Haskell backend before compiling C++
+# Define where our shaders live and where the compiled binaries should go
+set(SHADER_SRC_DIR "${CMAKE_SOURCE_DIR}/shaders")
+set(SHADER_BIN_DIR "${CMAKE_BINARY_DIR}/shaders")
+file(MAKE_DIRECTORY ${SHADER_BIN_DIR})
+
+set(SHADERS 
+    ${SHADER_SRC_DIR}/shader.vert 
+    ${SHADER_SRC_DIR}/shader.frag
+)
+
+set(COMPILED_SHADERS "")
+
+# Loop through each shader and create a custom command to compile it
+foreach(SHADER ${SHADERS})
+    get_filename_component(FILE_NAME ${SHADER} NAME)
+    set(SPV_FILE "${SHADER_BIN_DIR}/${FILE_NAME}.spv")
+    
+    add_custom_command(
+        OUTPUT ${SPV_FILE}
+        COMMAND ${GLSLC} ${SHADER} -o ${SPV_FILE}
+        DEPENDS ${SHADER}
+        COMMENT "[Shaders] Compiling ${FILE_NAME} to SPIR-V..."
+    )
+    list(APPEND COMPILED_SHADERS ${SPV_FILE})
+endforeach()
+
+# Create a custom target that runs before our main executable builds
+add_custom_target(compile_shaders ALL DEPENDS ${COMPILED_SHADERS})
+
+
+# ------------------------------------------------------------------
+# The C++ Executable Setup
+# ------------------------------------------------------------------
+add_executable(KingGame 
+    src/main.cpp 
+    src/Application.cpp 
+    src/VulkanRenderer.cpp 
+    src/HaskellBridge.cpp
+    src/Logger.cpp
+    src/stb_image.cpp
+)
+
+# Tell CMake it MUST build the Haskell backend before compiling C++
 add_dependencies(KingGame haskell_backend)
+
+# Tell CMake to build the shaders before trying to build the game
+add_dependencies(KingGame compile_shaders)
 
 # Include the dynamically found GHC headers AND our freshly copied FFI stub
 target_include_directories(KingGame PRIVATE 
