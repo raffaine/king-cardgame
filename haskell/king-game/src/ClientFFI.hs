@@ -1,9 +1,9 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module ClientFFI where
 
-import Foreign.C.String
+import Foreign.C.String (CString, newCString, peekCString, withCString)
 import Foreign.Ptr
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
 import qualified Data.ByteString.Char8 as BS
 import System.IO.Unsafe (unsafePerformIO)
@@ -34,16 +34,36 @@ foreign import ccall "dynamic"
 
 instance ContextAwareAgent CppAgent where
     decideAction action game agent@(CppAgent cb) = do
-        -- 1. Sync the latest game state into the global TVar for C++ to query
+        -- Sync the latest game state into the global TVar for C++ to query
         atomically $ writeTVar globalGameState (Just game)
 
-        -- 2. Alert C++ that an action is required
+        -- Alert C++ that an action is required
         withCString (show action) $ \c_action ->
             invokeCb cb c_action
 
-        -- 3. Block the Agent thread until C++ calls `submit_action`
-        rsp <- atomically $ takeTMVar globalResponse
-        return (rsp, agent)
+        -- Get the raw decision from C++ (e.g., "PLAY 2H" or "GAME POSITIVA H")
+        rawRsp <- waitForResponse
+
+        -- Parse it into Command and Arguments
+        let rawString = BS.unpack rawRsp
+            parts     = words rawString
+            cmd       = if null parts then "" else head parts
+            args      = if length parts > 1 then Just (unwords (tail parts)) else Nothing
+            
+            -- Pipe it through mkPlayStr
+            finalStr  = mkPlayStr game cmd args
+
+        return (finalStr, agent)
+
+-- | Helper function to safely wait for C++ without triggering BlockedIndefinitelyOnSTM
+waitForResponse :: IO BS.ByteString
+waitForResponse = do
+    mRsp <- atomically $ tryTakeTMVar globalResponse
+    case mRsp of
+        Just rsp -> return rsp
+        Nothing  -> do
+            threadDelay 50000 -- Sleep for 50ms, then check again
+            waitForResponse
 
 ----------------------------------------------------------------------------------
 -- C-API Exports
@@ -60,8 +80,8 @@ startClientFFI c_srv c_sub c_usr c_pass cb = do
     usr  <- peekCString c_usr
     pass <- peekCString c_pass
 
-    -- Fork the game loop so the C++ main thread is not blocked
-    void $ forkIO $ runGameS srv sub usr pass (CppAgent cb)
+    -- C++ manages this thread but it is now blocked under Haskell control
+    runGameS srv sub usr pass (CppAgent cb)
 
 -- | C++ calls this to provide a decision (e.g., "PLAY Alice sec-A 10H")
 foreign export ccall "submit_action" submitActionFFI :: CString -> IO ()
@@ -71,6 +91,36 @@ submitActionFFI c_action = do
     action <- peekCString c_action
     -- Use tryPutTMVar so C++ doesn't accidentally deadlock itself if it double-clicks
     void $ atomically $ tryPutTMVar globalResponse (BS.pack action)
+
+-- | Let C++ fetch the current hand
+foreign export ccall "get_player_hand" getPlayerHandFFI :: IO CString
+
+getPlayerHandFFI :: IO CString
+getPlayerHandFFI = do
+    mGame <- readTVarIO globalGameState
+    case mGame of
+        Nothing -> newCString ""
+        Just g  -> do
+            -- roundCards holds the player's current hand. 
+            -- We join the cards into a single space-separated string (e.g., "2H 10S KD")
+            let handStr = unwords (roundCards g)
+            newCString handStr -- Allocates memory that C++ MUST free!
+
+-- | Let C++ fetch the available rules for the current hand
+foreign export ccall "get_available_rules" getAvailableRulesFFI :: IO CString
+
+getAvailableRulesFFI :: IO CString
+getAvailableRulesFFI = do
+    mGame <- readTVarIO globalGameState
+    case mGame of
+        Nothing -> newCString ""
+        Just g  -> do
+            case gameHands g of
+                -- Match the active hand and extract the Left (available) rules
+                (KingHand (Left rules) _ _ _ : _) -> do
+                    let rulesStr = unwords (map show rules)
+                    newCString rulesStr
+                _ -> newCString "" -- Return empty if a rule is already chosen
 
 -- | Example State Getter: Let C++ poll the current active turn
 foreign export ccall "get_active_turn" getActiveTurnFFI :: IO Int

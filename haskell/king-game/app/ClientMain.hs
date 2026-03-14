@@ -23,7 +23,7 @@ newtype SimpleBot = SimpleBot { sName :: String }
 instance ContextAwareAgent SimpleBot where
     decideAction action game state = do
         let decisionStr = case action of
-                KTrump  -> mkPlayStr game "GAME" (Just "POSITIVA H")
+                KTrump  -> mkPlayStr game "TRUMP" (Just "H")
                 KBid    -> mkPlayStr game "BID" (Just "0")
                 KDecide -> mkPlayStr game "DECIDE" (Just "False")
                 KRule   -> pickRule game

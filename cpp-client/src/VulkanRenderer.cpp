@@ -69,18 +69,20 @@ VulkanRenderer::~VulkanRenderer() {
     if (vertexBufferMemory != VK_NULL_HANDLE) {
         vkFreeMemory(device, vertexBufferMemory, nullptr);
     }
-    if (textureSampler != VK_NULL_HANDLE) {
-        vkDestroySampler(device, textureSampler, nullptr);
-    }
-    if (textureImageView != VK_NULL_HANDLE) {
-        vkDestroyImageView(device, textureImageView, nullptr);
-    }
-    // Destroy Texture Image
-    if (textureImage != VK_NULL_HANDLE) {
-        vkDestroyImage(device, textureImage, nullptr);
-    }
-    if (textureImageMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(device, textureImageMemory, nullptr);
+    // Destroy Texture Data
+    for (auto tex : textures) {
+        if (tex.sampler != VK_NULL_HANDLE) {
+            vkDestroySampler(device, tex.sampler, nullptr);
+        }
+        if (tex.view != VK_NULL_HANDLE) {
+            vkDestroyImageView(device, tex.view, nullptr);
+        }
+        if (tex.image != VK_NULL_HANDLE) {
+            vkDestroyImage(device, tex.image, nullptr);
+        }
+        if (tex.memory != VK_NULL_HANDLE) {
+            vkFreeMemory(device, tex.memory, nullptr);
+        }
     }
     // Destroy Pipeline and Layouts
     if (graphicsPipeline != VK_NULL_HANDLE) {
@@ -156,12 +158,13 @@ void VulkanRenderer::initVulkan() {
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
-    createTextureImage();
-    createTextureImageView();
-    createTextureSampler();
     createVertexBuffer();
     createDescriptorPool();
-    createDescriptorSets();
+    
+    // Texture ID 0: The Solid White Pixel
+    unsigned char whitePixel[4] = {255, 255, 255, 255};
+    loadTextureFromPixels(whitePixel, 1, 1);
+
     createCommandBuffer();
     createSyncObjects();
 }
@@ -554,6 +557,47 @@ void VulkanRenderer::createImageViews() {
     Logger::log(LogLevel::VERBOSE, "[VulkanRenderer] Image Views successfully created.");
 }
 
+VkImageView VulkanRenderer::createImageViewHelper(VkImage image, VkFormat format) {
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+
+    VkImageView imageView;
+    if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+        throw std::runtime_error("[VulkanRenderer] Fatal Error: Failed to create generic image view!");
+    }
+    return imageView;
+}
+
+VkSampler VulkanRenderer::createSamplerHelper() {
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+    VkSampler sampler;
+    if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
+        throw std::runtime_error("[VulkanRenderer] Fatal Error: Failed to create generic texture sampler!");
+    }
+    return sampler;
+}
+
 // ---------------------------------------------------------
 // --- RENDER PASS CREATION ---
 // ---------------------------------------------------------
@@ -735,7 +779,7 @@ void VulkanRenderer::createSyncObjects() {
     Logger::log(LogLevel::VERBOSE, "[VulkanRenderer] Synchronization objects successfully created.");
 }
 
-void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t vertexCount) {
+void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const std::vector<RenderBatch>& batches, glm::mat4 viewProjMatrix) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -750,27 +794,15 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = swapChainExtent;
 
-    // A nice, classic casino felt-green for our card game
     VkClearValue clearColor = {{{0.05f, 0.4f, 0.1f, 1.0f}}};
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &clearColor;
 
-    // 1. Begin the Render Pass
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    // --- DRAWING COMMANDS ---
-    
-    // Bind the Graphics Pipeline
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &viewProjMatrix);
 
-    // Bind the Descriptor Set to fulfill the shader's texture requirement
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-
-    // PUSH CONSTANT for Aspect Ratio
-    float aspectRatio = static_cast<float>(swapChainExtent.height) / static_cast<float>(swapChainExtent.width);
-    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float), &aspectRatio);
-
-    // Set the Dynamic Viewport
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -780,21 +812,39 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-    // Set the Dynamic Scissor
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    // Bind the Vertex Buffer
     VkBuffer vertexBuffers[] = {vertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-    // Draw exactly the number of vertices we passed in this frame!
-    vkCmdDraw(commandBuffer, vertexCount, 1, 0, 0);
+    // --- THE BATCH RENDER LOOP ---
+    uint32_t vertexOffset = 0;
+    
+    for (const auto& batch : batches) {
+        uint32_t vertexCount = static_cast<uint32_t>(batch.vertices.size());
+        if (vertexCount == 0) continue;
 
-    // 2. End the Render Pass
+        // Safety check to prevent crashing the driver with a bad ID
+        if (batch.textureId >= textures.size()) {
+            Logger::log(LogLevel::ERROR, "[VulkanRenderer] Attempted to render batch with invalid texture ID: ", batch.textureId);
+            vertexOffset += vertexCount; // Skip the vertices for this broken batch
+            continue; 
+        }
+
+        // Hot-swap to the specific texture descriptor set for this batch!
+        VkDescriptorSet setToBind = textures[batch.textureId].descriptorSet;
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &setToBind, 0, nullptr);
+
+        // Draw exactly this chunk of vertices
+        vkCmdDraw(commandBuffer, vertexCount, 1, vertexOffset, 0);
+        
+        vertexOffset += vertexCount;
+    }
+
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -802,42 +852,54 @@ void VulkanRenderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
     }
 }
 
-void VulkanRenderer::drawFrame(const std::vector<Vertex>& vertices) {
+void VulkanRenderer::drawFrame(const std::vector<RenderBatch>& batches, const glm::mat4& viewProjMatrix) {
     // 1. Wait for the previous frame to finish drawing
     vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
 
-    // UPLOAD DYNAMIC GEOMETRY
-    if (!vertices.empty()) {
-        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+    // 2. Pack all vertices into one buffer sequentially
+    uint32_t totalVertices = 0;
+    for (const auto& batch : batches) {
+        totalVertices += batch.vertices.size();
+    }
+
+    if (totalVertices > 0) {
         void* data;
-        vkMapMemory(device, vertexBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, vertices.data(), (size_t) bufferSize);
+        vkMapMemory(device, vertexBufferMemory, 0, sizeof(Vertex) * totalVertices, 0, &data);
+        
+        Vertex* currentOffset = static_cast<Vertex*>(data);
+        for (const auto& batch : batches) {
+            size_t batchSize = batch.vertices.size();
+            if (batchSize > 0) {
+                memcpy(currentOffset, batch.vertices.data(), sizeof(Vertex) * batchSize);
+                currentOffset += batchSize;
+            }
+        }
         vkUnmapMemory(device, vertexBufferMemory);
     }
 
-    // 2. Ask the Swapchain for the next available image
+    // 3. Ask the Swapchain for the next available image
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
     
-    // If the swapchain is dead, rebuild it and skip this frame
+    // If the swapchain is dead (e.g., window resized), rebuild it and skip this frame
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
         return; 
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("[VulkanRenderer] Failed to acquire swap chain image!");
     }
-    // (Only reset the fence AFTER we know we are actually going to draw)
+
+    // Only reset the fence AFTER we know we are actually going to draw
     vkResetFences(device, 1, &inFlightFence);
 
-    // 3. Clear our Command Buffer and record the new draw instructions
+    // 4. Clear our Command Buffer and record the new draw instructions
     vkResetCommandBuffer(commandBuffer, 0);
-    recordCommandBuffer(commandBuffer, imageIndex, static_cast<uint32_t>(vertices.size()));
+    recordCommandBuffer(commandBuffer, imageIndex, batches, viewProjMatrix);
 
-    // 4. Submit the Command Buffer to the Graphics Queue
+    // 5. Submit the Command Buffer to the Graphics Queue
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    // Tell it to wait for the image to be available before writing colors
     VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
@@ -847,7 +909,6 @@ void VulkanRenderer::drawFrame(const std::vector<Vertex>& vertices) {
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    // Tell it to signal this semaphore when it finishes drawing
     VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
@@ -856,7 +917,7 @@ void VulkanRenderer::drawFrame(const std::vector<Vertex>& vertices) {
         throw std::runtime_error("[VulkanRenderer] Failed to submit draw command buffer!");
     }
 
-    // 5. Present the finished frame to the SDL window!
+    // 6. Present the finished frame to the SDL window
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
@@ -868,7 +929,8 @@ void VulkanRenderer::drawFrame(const std::vector<Vertex>& vertices) {
     presentInfo.pImageIndices = &imageIndex;
 
     result = vkQueuePresentKHR(graphicsQueue, &presentInfo);
-    // If the window was resized during drawing, or SDL told us it resized, rebuild!
+    
+    // Check if SDL triggered a resize during the frame presentation
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
         framebufferResized = false;
         recreateSwapChain();
@@ -1015,7 +1077,7 @@ void VulkanRenderer::createGraphicsPipeline() {
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(float); // We are just sending one float
+    pushConstantRange.size = sizeof(glm::mat4);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1162,57 +1224,6 @@ void VulkanRenderer::createImage(uint32_t width, uint32_t height, VkFormat forma
     vkBindImageMemory(device, image, imageMemory, 0);
 }
 
-void VulkanRenderer::createTextureImage() {
-    int texWidth, texHeight, texChannels;
-    
-    // 1. Load the PNG file using stb_image
-    // Force it to load with 4 channels (RGBA)
-    stbi_uc* pixels = stbi_load("cards.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    
-    if (!pixels) {
-        Logger::log(LogLevel::ERROR, "[VulkanRenderer] Fatal Error: Failed to load texture image! Check if cards.png is in the same directory as the executable.");
-        throw std::runtime_error("[VulkanRenderer] Failed to load texture image!");
-    }
-
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-    Logger::log(LogLevel::INFO, "[VulkanRenderer] Texture loaded. Width: ", texWidth, " Height: ", texHeight);
-
-    // 2. Create a CPU-visible Staging Buffer
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-    // 3. Copy the pixel data into the Staging Buffer
-    void* data;
-    vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-    memcpy(data, pixels, static_cast<size_t>(imageSize));
-    vkUnmapMemory(device, stagingBufferMemory);
-
-    // Free the original pixel array now that it's in the buffer
-    stbi_image_free(pixels); 
-
-    // 4. Create the actual GPU-local Vulkan Image
-    // We mark it as a Transfer Destination (so we can copy the buffer to it) and Sampled (so shaders can read it)
-    createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
-
-    // --- THE TRANSFER ---
-    // Transition image to be a transfer destination
-    transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    
-    // Copy the pixels from the buffer to the image
-    copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    
-    // Transition image so the shader is allowed to read it
-    transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    // -------------------------
-
-    // 5. Cleanup the Staging Buffer
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
-    
-    Logger::log(LogLevel::VERBOSE, "[VulkanRenderer] Texture Image created successfully.");
-}
-
 // ---------------------------------------------------------
 // --- IMAGE TRANSFERS & SAMPLERS ---
 // ---------------------------------------------------------
@@ -1304,43 +1315,6 @@ void VulkanRenderer::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t 
     endSingleTimeCommands(commandBuffer);
 }
 
-void VulkanRenderer::createTextureImageView() {
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = textureImage;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-
-    if (vkCreateImageView(device, &viewInfo, nullptr, &textureImageView) != VK_SUCCESS) {
-        throw std::runtime_error("[VulkanRenderer] Fatal Error: Failed to create texture image view!");
-    }
-}
-
-void VulkanRenderer::createTextureSampler() {
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-    if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
-        throw std::runtime_error("[VulkanRenderer] Fatal Error: Failed to create texture sampler!");
-    }
-}
-
 // ---------------------------------------------------------
 // --- DESCRIPTORS ---
 // ---------------------------------------------------------
@@ -1349,7 +1323,7 @@ void VulkanRenderer::createDescriptorPool() {
     // We only have one type of descriptor right now: A Combined Image Sampler
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSize.descriptorCount = 1;
+    poolSize.descriptorCount = MAX_TEXTURES;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1357,41 +1331,84 @@ void VulkanRenderer::createDescriptorPool() {
     poolInfo.pPoolSizes = &poolSize;
     
     // We only need to allocate one total set for our single texture
-    poolInfo.maxSets = 1;
+    poolInfo.maxSets = MAX_TEXTURES;
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("[VulkanRenderer] Fatal Error: Failed to create descriptor pool!");
     }
 }
 
-void VulkanRenderer::createDescriptorSets() {
+uint32_t VulkanRenderer::createTextureFromData(unsigned char* pixels, int width, int height) {
+    TextureData tex{};
+    VkDeviceSize imageSize = width * height * 4;
+
+    // 1. Staging Buffer Copy (Same as before)
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    // 2. Create Image, View, and Sampler (Same as before)
+    createImage(width, height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tex.image, tex.memory);
+    transitionImageLayout(tex.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(stagingBuffer, tex.image, static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+    transitionImageLayout(tex.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+    // Create View & Sampler (Assuming you adapted your helpers to take/return handles)
+    tex.view = createImageViewHelper(tex.image, VK_FORMAT_R8G8B8A8_SRGB);
+    tex.sampler = createSamplerHelper(); 
+
+    // 3. --- DYNAMIC DESCRIPTOR ALLOCATION ---
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &descriptorSetLayout; // Using the layout we made earlier!
+    allocInfo.pSetLayouts = &descriptorSetLayout; // Everyone uses the same blueprint!
 
-    if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("[VulkanRenderer] Fatal Error: Failed to allocate descriptor sets!");
+    if (vkAllocateDescriptorSets(device, &allocInfo, &tex.descriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("[VulkanRenderer] Failed to allocate dynamic descriptor set!");
     }
 
-    // Now, actually configure the Descriptor Set with our texture data
     VkDescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView = textureImageView;
-    imageInfo.sampler = textureSampler;
+    imageInfo.imageView = tex.view;
+    imageInfo.sampler = tex.sampler;
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = descriptorSet;
-    descriptorWrite.dstBinding = 0; // Matches layout(binding = 0) in the shader
+    descriptorWrite.dstSet = tex.descriptorSet;
+    descriptorWrite.dstBinding = 0; // EVERY texture binds to slot 0 in its own set!
     descriptorWrite.dstArrayElement = 0;
     descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pImageInfo = &imageInfo;
 
-    // Apply the write operation to the GPU
     vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+
+    // 4. Store and return the ID
+    textures.push_back(tex);
+    return textures.size() - 1; // Return the index as the Texture ID
+}
+
+// Public wrapper for PNGs
+uint32_t VulkanRenderer::loadTexture(const std::string& filepath) {
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load(filepath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    if (!pixels) throw std::runtime_error("[VulkanRenderer] Failed to load texture!");
     
-    Logger::log(LogLevel::VERBOSE, "[VulkanRenderer] Descriptor Sets successfully created and bound to texture.");
+    uint32_t id = createTextureFromData(pixels, texWidth, texHeight);
+    stbi_image_free(pixels);
+    return id;
+}
+
+// Public wrapper for Fonts
+uint32_t VulkanRenderer::loadTextureFromPixels(unsigned char* pixels, int width, int height) {
+    return createTextureFromData(pixels, width, height);
 }

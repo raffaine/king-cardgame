@@ -1,6 +1,7 @@
 #pragma once
 #include <SDL2/SDL.h>
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
 #include <vector>
 #include <string>
 #include <optional>
@@ -65,22 +66,24 @@ struct Vertex {
     }
 };
 
-// // We adjust the X positions to -0.32 and +0.32 so the card is taller than it is wide (aspect ratio 0.64)
-// // We adjust the U/V texture coordinates to frame exactly the Ace of Spades!
-// const std::vector<Vertex> vertices = {
-//     // Triangle 1 (Top-Left, Top-Right, Bottom-Right)
-//     {{-0.32f, -0.5f}, {0.0f,     0.6f}}, 
-//     {{ 0.32f, -0.5f}, {0.0769f,  0.6f}}, 
-//     {{ 0.32f,  0.5f}, {0.0769f,  0.8f}}, 
+// Group vertices by which texture they use
+struct RenderBatch {
+    uint32_t textureId;
+    std::vector<Vertex> vertices;
+};
 
-//     // Triangle 2 (Bottom-Right, Bottom-Left, Top-Left)
-//     {{ 0.32f,  0.5f}, {0.0769f,  0.8f}}, 
-//     {{-0.32f,  0.5f}, {0.0f,     0.8f}}, 
-//     {{-0.32f, -0.5f}, {0.0f,     0.6f}}  
-// };
+// Encapsulate Vulkan texture resources
+struct TextureData {
+    VkImage image;
+    VkDeviceMemory memory;
+    VkImageView view;
+    VkSampler sampler;
+    VkDescriptorSet descriptorSet; 
+};
 
 // 52 cards * 6 vertices per card = 312 vertices maximum
 const int MAX_VERTICES = 1000;
+const int MAX_TEXTURES = 100;
 
 class VulkanRenderer {
 public:
@@ -88,10 +91,17 @@ public:
     ~VulkanRenderer();
     SDL_Window* getWindow() const { return window; }
 
-    // Public methods for the Application loop
-    void drawFrame(const std::vector<Vertex>& vertices);
-    void waitIdle(); // Waits for the GPU to finish before shutting down
+    // Dynamic loading methods returning a Texture ID
+    uint32_t loadTexture(const std::string& filepath);
+    uint32_t loadTextureFromPixels(unsigned char* pixels, int width, int height);
 
+    // Draw a list of batches
+    void drawFrame(const std::vector<RenderBatch>& batches, const glm::mat4& viewProj);
+
+    // Waits for the GPU to finish before shutting down
+    void waitIdle();
+
+    // Inform of a Resize Event
     bool framebufferResized = false;
 
 private:
@@ -131,15 +141,13 @@ private:
     // Vertex Buffer Handles
     VkBuffer vertexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;
-    // Texture Image Handles
-    VkImage textureImage = VK_NULL_HANDLE;
-    VkDeviceMemory textureImageMemory = VK_NULL_HANDLE;
-    // Texture View and Sampler
-    VkImageView textureImageView = VK_NULL_HANDLE;
-    VkSampler textureSampler = VK_NULL_HANDLE;
-    // Descriptor Pool and Set
+    // Descriptor Pool
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+    // Textures
+    std::vector<TextureData> textures;
+
+    // Helper to generate a texture from raw data
+    uint32_t createTextureFromData(unsigned char* pixels, int width, int height);
 
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -194,17 +202,20 @@ private:
 
     // Image Methods
     void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
-    void createTextureImage();
+
     // Image Transfer & Setup Methods
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer);
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-    void createTextureImageView();
-    void createTextureSampler();
+    
     // Descriptor creation methods
     void createDescriptorPool();
-    void createDescriptorSets();
+    //void createDescriptorSets();
+
+    // Generic Vulkan handle generators
+    VkImageView createImageViewHelper(VkImage image, VkFormat format);
+    VkSampler createSamplerHelper();
 
     // Framebuffer Creation
     void createFramebuffers();
@@ -215,7 +226,7 @@ private:
 
     // Sync objects and Drawing
     void createSyncObjects();
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, uint32_t vertexCount);
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, const std::vector<RenderBatch>& batches, glm::mat4 viewProjMatrix);
 
     // The Vulkan debug callback function
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(

@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <functional>
+#include <queue>
+#include <mutex>
 
 class HaskellBridge {
 public:
@@ -12,12 +14,21 @@ public:
     void connectToServer(const std::string& subUrl, const std::string& pushUrl, 
                          const std::string& player, const std::string& password);
 
-    // Provide a modern C++ callback for the C-API to trigger
-    void setActionCallback(std::function<void(const std::string&)> callback);
+    // FFI callback will call this
+    void pushAction(const char* action);
+    
+    // Main loop will call this
+    bool pollAction(std::string& outAction);
+    
+    // Call this when the user actually clicks a button to reply to the server
+    void submitAction(const std::string& reply);
 
-    // Executes callback
-    static void runCallback(const std::string&);
+    // Fetch the cards in hand
+    std::vector<std::string> getPlayerHand();
+    // Fetch the available rules 
+    std::vector<std::string> getAvailableRules();
 
 private:
-    static std::function<void(const std::string&)> currentCallback;
+    std::queue<std::string> actionQueue;
+    std::mutex queueMutex;
 };

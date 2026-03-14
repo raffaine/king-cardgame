@@ -61,6 +61,9 @@ endif()
 # Convert the relative path '..' into a concrete absolute path
 get_filename_component(HASKELL_PROJECT_ROOT "${CMAKE_SOURCE_DIR}/../haskell/king-game" ABSOLUTE)
 
+set(SERVER_EXE "king-game-server-exe")
+set(BOT_EXE "king-game-client-exe")
+
 set(HASKELL_OUT_LIB_DIR "${CMAKE_BINARY_DIR}/haskell_artifacts/lib")
 set(HASKELL_OUT_INC_DIR "${CMAKE_BINARY_DIR}/haskell_artifacts/include")
 
@@ -103,6 +106,14 @@ endif()
 
 # 2. The Custom Target runs Cabal, then runs the CMake script we just wrote!
 add_custom_target(haskell_backend ALL
+    # Builds Haskel Binaries
+    COMMAND ${CABAL_EXECUTABLE} build ${SERVER_EXE}
+    COMMAND ${CABAL_EXECUTABLE} build ${BOT_EXE}
+    # After building, copy the executables to the CMake binary dir so C++ can easily spawn them
+    COMMAND cp `${CABAL_EXECUTABLE} list-bin -v0 ${SERVER_EXE}` ${CMAKE_BINARY_DIR}/${SERVER_EXE}
+    COMMAND cp `${CABAL_EXECUTABLE} list-bin -v0 ${BOT_EXE}` ${CMAKE_BINARY_DIR}/${BOT_EXE}
+
+    # Builds the C++ FFI
     COMMAND ${CABAL_EXECUTABLE} build kingclient
     # ${CMAKE_COMMAND} is the path to the cmake executable itself. 
     # -P tells it to process the script without configuring a project.
@@ -153,12 +164,21 @@ add_custom_target(compile_shaders ALL DEPENDS ${COMPILED_SHADERS})
 # The C++ Executable Setup
 # ------------------------------------------------------------------
 add_executable(KingGame 
-    src/main.cpp 
-    src/Application.cpp 
+    src/main.cpp
+    src/stb_image.cpp    
+    src/stb_truetype.cpp
+    src/Application.cpp
+    src/ProcessManager.cpp
     src/VulkanRenderer.cpp 
     src/HaskellBridge.cpp
+    src/Card.cpp
+    src/Font.cpp
     src/Logger.cpp
-    src/stb_image.cpp
+    src/SceneManager.cpp
+    src/BaseGameScene.cpp
+    src/TitleScene.cpp
+    src/InGameScene.cpp
+    src/RuleSelectionScene.cpp
 )
 
 # Tell CMake it MUST build the Haskell backend before compiling C++

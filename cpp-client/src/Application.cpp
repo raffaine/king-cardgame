@@ -1,66 +1,99 @@
 #include "Application.h"
+#include <SDL2/SDL_vulkan.h>
+
+#include "TitleScene.h"
+
 #include "Logger.h"
 #include <iostream>
-
-// Helper to generate the 6 vertices for a single card
-void addCardToBatch(std::vector<Vertex>& batch, float x, float y, int column, int row) {
-    // Card dimensions in Vulkan normalized coordinates
-    float width = 0.32f;
-    float height = 0.5f;
-
-    // UV calculations based on the 13x5 atlas
-    float uvWidth = 1.0f / 13.0f;
-    float uvHeight = 1.0f / 5.0f;
-
-    float uStart = column * uvWidth;
-    float uEnd = (column + 1) * uvWidth;
-    float vStart = row * uvHeight;
-    float vEnd = (row + 1) * uvHeight;
-
-    // Triangle 1
-    batch.push_back({{x - width, y - height}, {uStart, vStart}});
-    batch.push_back({{x + width, y - height}, {uEnd,   vStart}});
-    batch.push_back({{x + width, y + height}, {uEnd,   vEnd}});
-
-    // Triangle 2
-    batch.push_back({{x + width, y + height}, {uEnd,   vEnd}});
-    batch.push_back({{x - width, y + height}, {uStart, vEnd}});
-    batch.push_back({{x - width, y - height}, {uStart, vStart}});
-}
+#include <thread>
 
 Application::Application(int argc, char* argv[]) : isRunning(false) {
     // 1. Boot the Haskell Engine
     bridge = std::make_unique<HaskellBridge>(argc, argv);
     
-    // Route Haskell events to our C++ class method
-    bridge->setActionCallback([this](const std::string& action) {
-        this->onHaskellAction(action);
-    });
+    // 1.1. Sending to Haskell
+    gameState.submitAction = [this](const std::string& reply) {
+        bridge->submitAction(reply);
+    };
 
-    bridge->connectToServer("tcp://127.0.0.1:5555", "tcp://127.0.0.1:5556", "Alice", "pass");
+    // 1.2. Fetching from Haskell and feeding the Scene
+    gameState.pollCommand = [this](Scene* activeScene) {
+        std::string cmd;
+        // Drain the thread-safe queue from the bridge
+        while (bridge->pollAction(cmd)) {
+            Logger::log(LogLevel::INFO, "[Application] Dispatching command to Scene: ", cmd);
+            activeScene->processCommand(cmd);
+        }
+    };
+
+    // Wire the state fetchers
+    gameState.getPlayerHand = [this]() {
+        return bridge->getPlayerHand();
+    };
+    gameState.getAvailableRules = [this]() {
+        return bridge->getAvailableRules();
+    };
 
     // 2. Boot the GPU Renderer
     renderer = std::make_unique<VulkanRenderer>("King Game", 1280, 720);
 }
 
-void Application::run() {
-    isRunning = true;
+void Application::run() {    
+    Logger::log(LogLevel::VERBOSE, "[Application] Loading Required Resources and Initial Scene.");
+
+    // Load the TTF file into CPU memory (baked at font size 64.0 for crispness)
+    if (!mainFont.load("assets/fonts/DejaVuSerif.ttf", 64.0f)) {
+        Logger::log(LogLevel::ERROR, "Failed to load main font!");
+    }
+
+    // Load the textures into the GPU and save their IDs to the GameState
+    gameState.cardTextureId = renderer->loadTexture("assets/cards.png");
+    gameState.fontTextureId = renderer->loadTextureFromPixels(mainFont.textureData, mainFont.textureWidth, mainFont.textureHeight);
+    
+    // Hand the Font pointer to the GameState
+    gameState.mainFont = &mainFont;
+
+    // Define the orchestration callback using a lambda
+    auto startGameOrchestration = [this]() {
+        // The Application owns the processManager and bridge, so it handles the flow
+        processManager.initialize([this]() {
+            // This inner lambda is the specific connection logic passed to the ProcessManager
+            Logger::log(LogLevel::INFO, "[Application] Connecting human player to server...");
+            
+            // Setup the Main Player
+            std::string srv = "tcp://localhost:5555";
+            std::string sub = "tcp://localhost:5556";
+            std::string user = "Loxas"; 
+            std::string pass = "pass";
+
+            // Spawn a dedicated OS thread for the Haskell ZeroMQ loop
+            std::thread([this, srv, sub, user, pass]() {
+                // This calls the C FFI export. It will block this specific thread forever.
+                bridge->connectToServer(srv, sub, user, pass); 
+            }).detach();
+        });
+    };
+
+    // Boot up the first scene
+    sceneManager.changeScene(std::make_unique<TitleScene>(&sceneManager, &gameState, std::move(startGameOrchestration)));
+
+    // Simple time tracking for smooth updates
+    Uint32 lastTime = SDL_GetTicks();
+    
     Logger::log(LogLevel::VERBOSE, "[Application] Entering main loop.");
 
+    isRunning = true;
     while (isRunning) {
-        handleEvents();
+        // Calculate Delta Time (seconds since last frame)
+        Uint32 currentTime = SDL_GetTicks();
+        float deltaTime = (currentTime - lastTime) / 1000.0f;
+        lastTime = currentTime;
+
+        handleEvents(); 
         
-        // 1. Create our empty batch for this frame
-        std::vector<Vertex> currentFrameVertices;
-
-        // 2. Add the Ace of Spades on the left (Row 3, Col 0)
-        addCardToBatch(currentFrameVertices, -0.4f, 0.0f, 0, 3);
-
-        // 3. Add the King of Hearts on the right (Row 2, Col 12)
-        addCardToBatch(currentFrameVertices, 0.4f, 0.0f, 12, 2);
-
-        // 4. Send the batch to the GPU!
-        renderer->drawFrame(currentFrameVertices);
+        // Delegate to the active scene
+        sceneManager.update(deltaTime);
+        sceneManager.render(renderer.get(), camera);
     }
 
     // Wait for the GPU to finish its current frame before we destroy the window
@@ -69,6 +102,8 @@ void Application::run() {
 
 void Application::handleEvents() {
     SDL_Event event;
+    const float panSpeed = 0.05f * camera.zoom; // Move faster when zoomed out
+
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             isRunning = false;
@@ -79,13 +114,23 @@ void Application::handleEvents() {
                 renderer->framebufferResized = true;
             }
         }
-        if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE) {
-            Logger::log(LogLevel::INFO, "[Application] Spacebar pressed! Ready to submit action to Haskell.");
-            // bridge->submitAction("PLAY ..."); 
+        // --- CAMERA INPUT ---
+        // Mouse Wheel for Zooming
+        if (event.type == SDL_MOUSEWHEEL) {
+            if (event.wheel.y > 0) camera.zoom *= 0.9f; // Zoom in
+            if (event.wheel.y < 0) camera.zoom *= 1.1f; // Zoom out
         }
-    }
-}
+        // Keyboard for Panning
+        if (event.type == SDL_KEYDOWN) {
+            switch (event.key.keysym.sym) {
+                case SDLK_w: camera.position.y -= panSpeed; break; // Up
+                case SDLK_s: camera.position.y += panSpeed; break; // Down
+                case SDLK_a: camera.position.x -= panSpeed; break; // Left
+                case SDLK_d: camera.position.x += panSpeed; break; // Right
+            }
+        }
 
-void Application::onHaskellAction(const std::string& action) {
-    Logger::log(LogLevel::INFO, "[Application] Received Action from Haskell: ", action);
+        // Pass any remaining unhandled input (like clicking cards) to the active Scene
+        sceneManager.handleInput(event);
+    }
 }
