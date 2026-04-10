@@ -25,3 +25,7 @@ void SceneManager::update(float deltaTime) {
 void SceneManager::render(VulkanRenderer* renderer, Camera& camera) {
     if (currentScene) currentScene->render(renderer, camera);
 }
+
+void SceneManager::processCommand(const std::string& cmd) {
+    if (currentScene) currentScene->processCommand(cmd);
+}

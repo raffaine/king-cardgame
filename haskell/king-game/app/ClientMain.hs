@@ -31,6 +31,9 @@ instance ContextAwareAgent SimpleBot where
                 _       -> ""
         return (decisionStr, state)
 
+    -- Bots don't care about passive updates right now
+    notifyStateChange _ _ = return
+
 -- Helper to safely pick the first available valid card using the new GameRules
 pickCard :: KingGame -> BS.ByteString
 pickCard game =

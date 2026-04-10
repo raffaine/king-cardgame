@@ -15,6 +15,8 @@ public:
     void update(float deltaTime);
     void render(VulkanRenderer* renderer, Camera& camera);
 
+    void processCommand(const std::string& cmd);
+
 private:
     GameState*      state;
 

@@ -25,19 +25,19 @@ Card::Card(const std::string& cardId, float startX, float startY)
     // 3. Parse the Rank (Everything before the suit character)
     std::string rankStr = cardId.substr(0, cardId.size() - 1);
     
-    if (rankStr == "2")      { rank = Rank::_2;  atlasCol = 0; }
-    else if (rankStr == "3") { rank = Rank::_3;  atlasCol = 1; }
-    else if (rankStr == "4") { rank = Rank::_4;  atlasCol = 2; }
-    else if (rankStr == "5") { rank = Rank::_5;  atlasCol = 3; }
-    else if (rankStr == "6") { rank = Rank::_6;  atlasCol = 4; }
-    else if (rankStr == "7") { rank = Rank::_7;  atlasCol = 5; }
-    else if (rankStr == "8") { rank = Rank::_8;  atlasCol = 6; }
-    else if (rankStr == "9") { rank = Rank::_9;  atlasCol = 7; }
-    else if (rankStr == "10"){ rank = Rank::_10; atlasCol = 8; }
-    else if (rankStr == "J") { rank = Rank::_J;  atlasCol = 9; }
-    else if (rankStr == "Q") { rank = Rank::_Q;  atlasCol = 10; }
-    else if (rankStr == "K") { rank = Rank::_K;  atlasCol = 11; }
-    else if (rankStr == "A") { rank = Rank::_A;  atlasCol = 12; }
+    if (rankStr == "A")      { rank = Rank::_A;  atlasCol = 0; }
+    else if (rankStr == "2") { rank = Rank::_2;  atlasCol = 1; }
+    else if (rankStr == "3") { rank = Rank::_3;  atlasCol = 2; }
+    else if (rankStr == "4") { rank = Rank::_4;  atlasCol = 3; }
+    else if (rankStr == "5") { rank = Rank::_5;  atlasCol = 4; }
+    else if (rankStr == "6") { rank = Rank::_6;  atlasCol = 5; }
+    else if (rankStr == "7") { rank = Rank::_7;  atlasCol = 6; }
+    else if (rankStr == "8") { rank = Rank::_8;  atlasCol = 7; }
+    else if (rankStr == "9") { rank = Rank::_9;  atlasCol = 8; }
+    else if (rankStr == "10"){ rank = Rank::_10; atlasCol = 9; }
+    else if (rankStr == "J") { rank = Rank::_J;  atlasCol = 10; }
+    else if (rankStr == "Q") { rank = Rank::_Q;  atlasCol = 11; }
+    else if (rankStr == "K") { rank = Rank::_K;  atlasCol = 12; }
 }
 
 void Card::addVertices(std::vector<Vertex>& batch) const {

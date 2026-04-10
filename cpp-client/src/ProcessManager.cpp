@@ -17,6 +17,10 @@ extern char **environ;
 // Initialize the global pointer
 static ProcessManager* globalInstance = nullptr;
 
+/* static */ ProcessManager* ProcessManager::get() {
+    return globalInstance;
+}
+
 // The global crash handler
 void handleCrashSignal(int signal) {
     if (globalInstance) {

@@ -142,17 +142,20 @@ evaluateMessageS srv info = do
         otherwise -> do
             return $ KOver "Unknown message"
 
---- Polls the info socket for messages, updates the game state, and returns the next expected action
-updateGame :: (Sender s, Receiver s, Receiver r) => Socket z s -> Socket z r -> Timeout -> KingGameS z ExpectedAction
+--- Polls the info socket for messages, updates the game state,
+---     and returns the next expected action and raw message
+updateGame :: (Sender s, Receiver s, Receiver r) => Socket z s -> Socket z r -> Timeout -> KingGameS z (ExpectedAction, String)
 updateGame srv info timeout = do
     let evt = [Sock info [In] Nothing ]
     evts <- lift $ poll timeout evt
     case evts of
-        [hs] | null hs -> return KWait
+        [hs] | null hs -> return (KWait, "")
         otherwise -> do
             msg <- lift $ receive info
-            liftIO $ putStrLn $ BS.unpack msg
-            evaluateMessageS srv $ BS.unpack msg
+            let strMsg = BS.unpack msg
+            liftIO $ putStrLn strMsg
+            act <- evaluateMessageS srv strMsg
+            return (act, strMsg)
 
 --- Send an action response back to the server and wait for an acknowledgment
 executeActionS :: (Sender s, Receiver s) => Socket z s -> BS.ByteString -> ZMQ z ActionResponse

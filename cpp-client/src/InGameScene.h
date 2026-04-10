@@ -1,6 +1,8 @@
 #pragma once
 #include "BaseGameScene.h"
 
+#include <optional>
+
 class InGameScene : public BaseGameScene {
 public:
     InGameScene(SceneManager* mgr, GameState* st);
@@ -11,4 +13,8 @@ public:
     
     void update(float deltaTime) override;
     void processCommand(const std::string& cmd) override;
+
+private:
+    int winWidth = 0;
+    int winHeight = 0;
 };

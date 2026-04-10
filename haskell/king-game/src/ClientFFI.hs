@@ -29,7 +29,7 @@ globalGameState = unsafePerformIO (newTVarIO Nothing)
 newtype CppAgent = CppAgent (FunPtr (CString -> IO ()))
 
 -- Dynamic wrapper to allow Haskell to invoke the provided C++ function pointer
-foreign import ccall "dynamic"
+foreign import ccall safe "dynamic"
     invokeCb :: FunPtr (CString -> IO ()) -> CString -> IO ()
 
 instance ContextAwareAgent CppAgent where
@@ -49,11 +49,21 @@ instance ContextAwareAgent CppAgent where
             parts     = words rawString
             cmd       = if null parts then "" else head parts
             args      = if length parts > 1 then Just (unwords (tail parts)) else Nothing
-            
+
             -- Pipe it through mkPlayStr
             finalStr  = mkPlayStr game cmd args
 
         return (finalStr, agent)
+
+    -- | Passive Updates
+    notifyStateChange msgStr game agent@(CppAgent cb) = do
+        atomically $ writeTVar globalGameState (Just game)
+
+        -- Prefix with KUpdate so C++ knows how to parse it
+        withCString ("KUpdate " ++ msgStr) $ \c_action ->
+            invokeCb cb c_action
+
+        return agent
 
 -- | Helper function to safely wait for C++ without triggering BlockedIndefinitelyOnSTM
 waitForResponse :: IO BS.ByteString
@@ -62,7 +72,7 @@ waitForResponse = do
     case mRsp of
         Just rsp -> return rsp
         Nothing  -> do
-            threadDelay 50000 -- Sleep for 50ms, then check again
+            threadDelay 5000 -- Sleep for 5ms, then check again
             waitForResponse
 
 ----------------------------------------------------------------------------------
@@ -121,6 +131,18 @@ getAvailableRulesFFI = do
                     let rulesStr = unwords (map show rules)
                     newCString rulesStr
                 _ -> newCString "" -- Return empty if a rule is already chosen
+
+-- | Let C++ fetch the cards currently played on the table
+foreign export ccall "get_table_cards" getTableCardsFFI :: IO CString
+
+getTableCardsFFI :: IO CString
+getTableCardsFFI = do
+    mGame <- readTVarIO globalGameState
+    case mGame of
+        Nothing -> newCString ""
+        Just g  -> case gameHands g of
+            (h:_) -> newCString (unwords $ curRound h)
+            _     -> newCString "" -- No hand started yet
 
 -- | Example State Getter: Let C++ poll the current active turn
 foreign export ccall "get_active_turn" getActiveTurnFFI :: IO Int

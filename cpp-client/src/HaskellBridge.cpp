@@ -9,6 +9,8 @@
 #include "HsFFI.h"
 #include "ClientFFI_stub.h"
 
+#include "ProcessManager.h"
+
 // Static member initialization for the C-callback routing
 static HaskellBridge* gBridge = nullptr;
 
@@ -20,28 +22,58 @@ extern "C" void c_callback_wrapper(char* action) {
     }
 }
 
-HaskellBridge::HaskellBridge(int argc, char* argv[]) {
+HaskellBridge::HaskellBridge() {
     hs_init(nullptr, nullptr);
     Logger::log(LogLevel::VERBOSE, "[HaskellBridge] RTS Initialized.");
-    gBridge = this;
 }
 
 HaskellBridge::~HaskellBridge() {
-    gBridge = nullptr;
-    hs_exit();
-    Logger::log(LogLevel::VERBOSE, "[HaskellBridge] RTS Shutdown.");
+    if (bridgeActive) {
+        Logger::log(LogLevel::VERBOSE, "[HaskellBridge] Shutting down. Terminating backend processes to unblock thread...");
+        
+        // Kill the Server and Bots. 
+        // This instantly severs the ZeroMQ connection Haskell is waiting on
+        if (ProcessManager::get()) {
+            ProcessManager::get()->terminateAll();
+        }
+        
+        Logger::log(LogLevel::VERBOSE, "[HaskellBridge] All process terminated.");
+        if (workerThread.joinable()) {
+            workerThread.detach();
+        }
+    } else {
+        // Clean up the thread safely when the engine shuts down
+        if (workerThread.joinable()) {
+            workerThread.join(); 
+        }
+    }
+
+    Logger::log(LogLevel::VERBOSE, "[HaskellBridge] Bridge Shutdown completed.");
+}
+
+bool HaskellBridge::isAlive() const {
+    return bridgeActive;
 }
 
 void HaskellBridge::connectToServer(const std::string& subUrl, const std::string& pushUrl, 
-                                    const std::string& player, const std::string& password) {
-    start_client(
-        (char*)subUrl.c_str(),
-        (char*)pushUrl.c_str(),
-        (char*)player.c_str(),
-        (char*)password.c_str(),
-        (HsFunPtr)c_callback_wrapper
-    );
-    Logger::log(LogLevel::INFO, "[HaskellBridge] Client started for player: ", player);
+                                    const std::string& player, const std::string& password) {                                        
+    Logger::log(LogLevel::INFO, "[HaskellBridge] Starting Client for player: ", player);
+    bridgeActive = true;
+    gBridge = this;
+    
+    // Manage the thread properly instead of detaching it
+    workerThread = std::thread([=]() {
+        start_client(
+            (char*)subUrl.c_str(),
+            (char*)pushUrl.c_str(),
+            (char*)player.c_str(),
+            (char*)password.c_str(),
+            (HsFunPtr)c_callback_wrapper
+        );
+        bridgeActive = false;        
+        gBridge = nullptr;
+        Logger::log(LogLevel::ERROR, "[HaskellBridge] Client Terminated Unexpectedly.");
+    });
 }
 
 void HaskellBridge::pushAction(const char* action) {
@@ -83,6 +115,27 @@ std::vector<std::string> HaskellBridge::getPlayerHand() {
     // 4. Split the space-separated string into a vector of cards
     std::vector<std::string> cards;
     std::istringstream iss(handStr);
+    std::string card;
+    while (iss >> card) {
+        cards.push_back(card);
+    }
+    
+    return cards;
+}
+
+std::vector<std::string> HaskellBridge::getTableCards() {
+    // 1. Call the generated FFI stub
+    char* c_hand = (char*)get_table_cards();
+    
+    // 2. Safely copy the data into a C++ string
+    std::string tableStr(c_hand);
+    
+    // 3. CRITICAL: Free the memory allocated by Haskell's newCString!
+    free(c_hand); 
+    
+    // 4. Split the space-separated string into a vector of cards
+    std::vector<std::string> cards;
+    std::istringstream iss(tableStr);
     std::string card;
     while (iss >> card) {
         cards.push_back(card);

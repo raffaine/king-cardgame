@@ -9,31 +9,29 @@
 #include <thread>
 #include <chrono>
 
-TitleScene::TitleScene(SceneManager* mgr, GameState* st, std::function<void()> onStartCallback) 
-    : Scene(mgr, st), onStart(onStartCallback) {}
+TitleScene::TitleScene(SceneManager* mgr, GameState* st) 
+    : Scene(mgr, st) {}
 
 void TitleScene::onEnter() {
-    Logger::log(LogLevel::INFO, "Entered Title Scene. Press ENTER or Click to Start.");
+    Logger::log(LogLevel::INFO, "[Title Scene] Press ENTER or Click to Start.");
     // (Later, we will draw the game logo here)
+    state->currentPhase = GamePhase::NOT_STARTED;
 }
 
 void TitleScene::onExit() {
-    Logger::log(LogLevel::INFO, "Exiting Title Scene. Spawning Haskell backend...");
-    // (Later, this is where we will trigger the OS process to launch king-server)
+    Logger::log(LogLevel::INFO, "[Title Scene] Starting Match Orchestration...");
+    
+    // Launch the Game
+    if (state->startGameOrchestration) {
+        // Move the C++ State Machine forward
+        state->currentPhase = GamePhase::INITIALIZING;
+        state->startGameOrchestration();
+    }
 }
 
 void TitleScene::handleInput(const SDL_Event& event) {
     if ((event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN) ||
         (event.type == SDL_MOUSEBUTTONDOWN)) {
-        Logger::log(LogLevel::INFO, "Starting Match Orchestration...");
-
-        // Launch the Game
-        if (onStart) {
-            onStart();
-        }
-
-        // Move the C++ State Machine forward
-        state->currentPhase = GamePhase::INITIALIZING;
         
         // Transition to Next Scene
         manager->changeScene<BaseGameScene>();

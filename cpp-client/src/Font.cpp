@@ -38,20 +38,20 @@ bool Font::load(const std::string& ttfPath, float fontSize) {
 }
 
 void Font::addTextToBatch(std::vector<Vertex>& batch, const std::string& text, float startX, float startY, float scale) const {
-    float x = startX;
-    float y = startY;
+    float cursorX = 0.0f; 
+    float cursorY = 0.0f;
 
     for (char c : text) {
         if (c >= 32 && c < 128) {
             stbtt_aligned_quad q;
-            // Get the quad metrics and advance the X coordinate for the next character
-            stbtt_GetBakedQuad(charData, textureWidth, textureHeight, c - 32, &x, &y, &q, 1);
+            stbtt_GetBakedQuad(charData, textureWidth, textureHeight, c - 32, &cursorX, &cursorY, &q, 1);
 
-            // Scale the quad to match your Vulkan coordinate system
-            float x0 = q.x0 * scale; float x1 = q.x1 * scale;
-            float y0 = q.y0 * scale; float y1 = q.y1 * scale;
+            // 2. Scale the pixel output down, THEN add your world coordinates!
+            float x0 = startX + (q.x0 * scale); 
+            float x1 = startX + (q.x1 * scale);
+            float y0 = startY + (q.y0 * scale); 
+            float y1 = startY + (q.y1 * scale);
 
-            // Generate the two triangles (6 vertices) for this character
             batch.push_back({{x0, y0}, {q.s0, q.t0}});
             batch.push_back({{x1, y0}, {q.s1, q.t0}});
             batch.push_back({{x1, y1}, {q.s1, q.t1}});

@@ -9,7 +9,7 @@
 
 Application::Application(int argc, char* argv[]) : isRunning(false) {
     // 1. Boot the Haskell Engine
-    bridge = std::make_unique<HaskellBridge>(argc, argv);
+    bridge = std::make_unique<HaskellBridge>();
     
     // 1.1. Sending to Haskell
     gameState.submitAction = [this](const std::string& reply) {
@@ -17,18 +17,21 @@ Application::Application(int argc, char* argv[]) : isRunning(false) {
     };
 
     // 1.2. Fetching from Haskell and feeding the Scene
-    gameState.pollCommand = [this](Scene* activeScene) {
-        std::string cmd;
-        // Drain the thread-safe queue from the bridge
-        while (bridge->pollAction(cmd)) {
-            Logger::log(LogLevel::INFO, "[Application] Dispatching command to Scene: ", cmd);
-            activeScene->processCommand(cmd);
-        }
-    };
+    // gameState.pollCommand = [this](Scene* activeScene) {
+    //     std::string cmd;
+    //     // Drain the thread-safe queue from the bridge
+    //     while (bridge->pollAction(cmd)) {
+    //         Logger::log(LogLevel::INFO, "[Application] Dispatching command to Scene: ", cmd);
+    //         activeScene->processCommand(cmd);
+    //     }
+    // };
 
-    // Wire the state fetchers
+    // 1.3 Wire the state fetchers
     gameState.getPlayerHand = [this]() {
         return bridge->getPlayerHand();
+    };
+    gameState.getTableCards = [this]() {
+        return bridge->getTableCards();
     };
     gameState.getAvailableRules = [this]() {
         return bridge->getAvailableRules();
@@ -49,12 +52,15 @@ void Application::run() {
     // Load the textures into the GPU and save their IDs to the GameState
     gameState.cardTextureId = renderer->loadTexture("assets/cards.png");
     gameState.fontTextureId = renderer->loadTextureFromPixels(mainFont.textureData, mainFont.textureWidth, mainFont.textureHeight);
+    // Pure, solid dark gray (RGBA)
+    unsigned char darkPixel[4] = {20, 20, 25, 255}; 
+    gameState.whiteTextureId = renderer->loadTextureFromPixels(darkPixel, 1, 1);
     
     // Hand the Font pointer to the GameState
     gameState.mainFont = &mainFont;
 
-    // Define the orchestration callback using a lambda
-    auto startGameOrchestration = [this]() {
+    // Define the orchestration callback
+    gameState.startGameOrchestration = [this]() {
         // The Application owns the processManager and bridge, so it handles the flow
         processManager.initialize([this]() {
             // This inner lambda is the specific connection logic passed to the ProcessManager
@@ -66,16 +72,16 @@ void Application::run() {
             std::string user = "Loxas"; 
             std::string pass = "pass";
 
-            // Spawn a dedicated OS thread for the Haskell ZeroMQ loop
-            std::thread([this, srv, sub, user, pass]() {
-                // This calls the C FFI export. It will block this specific thread forever.
-                bridge->connectToServer(srv, sub, user, pass); 
-            }).detach();
+            gameState.playerName = user;
+
+            // This spawns the C FFI export thread.
+            bridge->connectToServer(srv, sub, user, pass);
         });
     };
 
     // Boot up the first scene
-    sceneManager.changeScene(std::make_unique<TitleScene>(&sceneManager, &gameState, std::move(startGameOrchestration)));
+    gameState.currentPhase = GamePhase::NOT_STARTED;
+    sceneManager.changeScene<TitleScene>();
 
     // Simple time tracking for smooth updates
     Uint32 lastTime = SDL_GetTicks();
@@ -84,12 +90,49 @@ void Application::run() {
 
     isRunning = true;
     while (isRunning) {
+        // Check if the bridge died ungracefully
+        if (gameState.currentPhase != GamePhase::NOT_STARTED && bridge && !bridge->isAlive()) {
+            Logger::log(LogLevel::ERROR, "Lost connection to Haskell Bridge. Cleaning up and returning to Title.");
+            
+            // Wipe out any lingering server/bot processes
+            if (ProcessManager::get()) {
+                ProcessManager::get()->terminateAll();
+            }
+
+            // Reset the game state
+            gameState.currentPhase = GamePhase::NOT_STARTED;
+            gameState.cardsOnHand.clear();
+            gameState.cardsOnTable.clear();
+            
+            // Reconstruct the bridge safely (which will join the dead thread)
+            bridge = std::make_unique<HaskellBridge>();
+
+            // Swap back to the Title Scene
+            sceneManager.changeScene<TitleScene>();
+        }
+
         // Calculate Delta Time (seconds since last frame)
         Uint32 currentTime = SDL_GetTicks();
         float deltaTime = (currentTime - lastTime) / 1000.0f;
         lastTime = currentTime;
 
+        // Handles Input
         handleEvents(); 
+
+        // Update the animation lock timer
+        if (gameState.animationLockTimer > 0.0f) {
+            gameState.animationLockTimer -= deltaTime;
+        }
+
+        // --- THE ACTION DIRECTOR ---
+        // Only pull the NEXT command if we are done animating the PREVIOUS one
+        if (!gameState.isAnimating()) {
+            std::string pendingCmd;
+            if (bridge->pollAction(pendingCmd)) {                
+                Logger::log(LogLevel::VERBOSE, "[Application] Dispatching command to Scene: ", pendingCmd);
+                sceneManager.processCommand(pendingCmd);
+            }
+        }
         
         // Delegate to the active scene
         sceneManager.update(deltaTime);

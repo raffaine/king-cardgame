@@ -14,6 +14,8 @@ public:
     bool launchServer();
     bool launchBots(int count);
     void terminateAll();
+
+    static ProcessManager* get();
     
 private:
     pid_t serverPid = -1;

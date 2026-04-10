@@ -21,7 +21,9 @@ enum class GamePhase {
     AUCTION_DECISION,   // Positiva: Auctioneer decides to accept the highest bid or keep it
     TRUMP_WAIT_CHOICE,  // Positiva: Another player is choosing the Trump suit
     TRUMP_CHOICE,       // Positiva: Player chooses the Trump suit
-    TRICK_PLAYING,      // Main gameplay loop (playing cards into the center)
+    TRICK_PLAYING,      // Main gameplay loop (playing cards into the center)    
+    CHOOSE_PLAY,        // Part of main gameplay loop (waiting for player to choose a card to play)    
+    CHECKING_PLAY,      // Part of main gameplay loop (waiting for server to confirm played card is valid)
 };
 
 // ---------------------------------------------------------
@@ -51,6 +53,7 @@ public:
     GamePhase currentPhase = GamePhase::INITIALIZING;
 
     // Player Data (Always 4 players in King)
+    std::string playerName;
     std::array<Player, 4> players;
     
     // Table Positioning
@@ -76,13 +79,20 @@ public:
     uint32_t fontTextureId = 0;
     Font* mainFont = nullptr;    // Pointer so scenes can generate text vertices
 
-    // The Event Bus    
+    // A timer to pause the engine from pulling new network commands
+    float animationLockTimer = 0.0f; 
+    
+    bool isAnimating() const { return animationLockTimer > 0.0f; }
+
+    // The Event Bus
+    // Spawns Server and Clients
+    std::function<void(void)> startGameOrchestration;
     // Allows Scenes to send actions back to Haskell
     std::function<void(const std::string&)> submitAction;
-    // Allows Scenes to ask the Application to feed them queued commands
-    std::function<void(Scene*)> pollCommand;
     // Fetch the players Hand
-    std::function<std::vector<std::string>()> getPlayerHand;
+    std::function<std::vector<std::string>()> getPlayerHand;    
+    // Fetch the cards on the Table
+    std::function<std::vector<std::string>()> getTableCards;
     // Fetch the available Rules
     std::function<std::vector<std::string>()> getAvailableRules;
 };
