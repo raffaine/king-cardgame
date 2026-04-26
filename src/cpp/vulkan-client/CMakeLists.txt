@@ -59,7 +59,7 @@ endif()
 # Setup the Automated Cabal Build Target
 # ------------------------------------------------------------------
 # Convert the relative path '..' into a concrete absolute path
-get_filename_component(HASKELL_PROJECT_ROOT "${CMAKE_SOURCE_DIR}/../haskell/king-game" ABSOLUTE)
+get_filename_component(HASKELL_PROJECT_ROOT "${CMAKE_SOURCE_DIR}/../../haskell/king-game" ABSOLUTE)
 
 set(SERVER_EXE "king-game-server-exe")
 set(BOT_EXE "king-game-client-exe")
