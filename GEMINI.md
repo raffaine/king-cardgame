@@ -15,7 +15,7 @@ The Public King repository serves as the reference implementation and playground
 
 ## 3. Planned Actions & Roadmap
 
-To achieve our open-source vision and scale the Public King ecosystem, we are actively tracking the following initiatives:
+To achieve our open-source vision and scale the open King ecosystem, we are actively tracking the following initiatives:
 
 ### A. Repository Reorganization & Open Governance
 * **Structural Cleanup:** Reorganize the repository to clearly isolate public protocol definitions, the reference Haskell server, and the various open-source clients.
