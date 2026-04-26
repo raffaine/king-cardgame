@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.31005.135
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KingCard", "KingCard\KingCard.csproj", "{1A4C9ABF-96B6-4C4A-BBDB-0C981EFBB295}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KingCard", "monogame-client-ui\KingCard.csproj", "{1A4C9ABF-96B6-4C4A-BBDB-0C981EFBB295}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
