@@ -1,59 +1,59 @@
-# King: Um Ecossistema Aberto de Jogo de Cartas Multiplayer
+# King: An Open Multiplayer Card Game Ecosystem
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/Protocol-ZMQ-green.svg)](protocol/)
 
-King é um jogo de vazas altamente estratégico, construído sobre um protocolo de comunicação aberto e agnóstico a linguagem. Este repositório serve como a implementação de referência para o ecossistema **Public King**, apresentando um servidor autoritativo e uma diversidade de clientes e agentes de IA.
+King is a highly strategic, trick-taking card game built on an open, language-agnostic communication protocol. This repository serves as the reference implementation for the **Public King** ecosystem, featuring an authoritative server and a diverse range of clients and AI agents.
 
-## 🃏 O Jogo
+## 🃏 The Game
 
-As regras básicas do jogo podem ser consultadas na [Wikipédia](https://en.wikipedia.org/wiki/King_(card_game)).
+The basic rules of the game can be found on [Wikipedia](https://en.wikipedia.org/wiki/King_(card_game)).
 
-Em sua essência, King é um jogo de objetivos em constante mudança. Uma partida é dividida em duas fases:
-1.  **Rodadas Negativas (Penalidades):** Os jogadores buscam evitar fazer vazas, pegar copas ou o Rei de Copas para não perder pontos.
-2.  **Rodadas Positivas (Lances):** Os jogadores fazem lances e competem para garantir pontos através de jogo estratégico.
+At its core, King is a game of shifting objectives. A match is divided into two phases:
+1.  **Negative Rounds (Penalties):** Players aim to avoid taking tricks, hearts, or the specific "King of Hearts" to prevent losing points.
+2.  **Positive Rounds (Lances):** Players bid and compete to secure points through strategic play.
 
-### As Regras de Engajamento (O "Aloja")
-Esta implementação segue um conjunto de regras refinado e focado na agência do jogador, baseado em extensa experiência de jogo nas residências estudantis (o "Aloja"). As principais mudanças em relação ao King tradicional incluem:
-*   **Escolha Dinâmica de Rodadas:** Removemos a sequência rígida e tradicional de mãos. Os jogadores têm liberdade absoluta para escolher qual mão jogar com base em suas cartas iniciais.
-*   **Lances Estritos:** Resoluções precisas de lances e mecânicas de descarte sutis (especialmente para o Rei de Copas) transformam cada partida em uma batalha de planejamento estrutural.
-*   **Estratégia do Rei:** Na mão de "No King of Hearts" (ou simplesmente "King"), o jogador não é obrigado a jogar o Rei de Copas quando a rodada inicia com Copas, a menos que seja sua única opção de descarte.
+### The Rules of Engagement (The "Aloja")
+This implementation follows a refined ruleset focused on player agency, born from extensive gaming experience in student residences (the "Aloja"). Key departures from traditional King include:
+*   **Dynamic Round Selection:** We've removed the rigid and traditional sequence of hands. Players have absolute freedom to choose which hand to play based on their starting cards.
+*   **Strict Bidding:** Precise lance resolutions and subtle discard mechanics (especially for the King of Hearts) transform every match into a battle of structural planning.
+*   **The King's Strategy:** In the "No King of Hearts" hand (or simply "King"), players are not forced to play the King of Hearts when the round starts with Hearts, unless it is their only discard option.
 
-## 🏗️ Arquitetura & Protocolo
+## 🏗️ Architecture & Protocol
 
-O Public King foi projetado para ser um playground poliglota. O servidor e os clientes se comunicam através de um protocolo formalizado baseado em **ZeroMQ (ZMQ)**, permitindo que qualquer pessoa construa seu próprio cliente ou agente de IA em qualquer linguagem.
+Public King is designed to be a polyglot playground. The server and clients communicate via a formalized protocol based on **ZeroMQ (ZMQ)**, allowing anyone to build their own client or AI agent in any language.
 
-### Estrutura do Repositório
-*   `protocol/`: Especificação formal do protocolo ZMQ.
-*   `src/haskell/`: O servidor de jogo autoritativo (Haskell).
-*   `src/python/`: Implementação de referência da lógica, servidor e bots básicos.
-*   `src/cpp/`: Clientes de alta performance (Console e Vulkan/3D).
-*   `src/csharp/`: Clientes gráficos em .NET e MonoGame.
-*   `src/nodejs/`: Implementação de cliente para web.
-*   `src/rust/`: Cliente experimental em Rust.
+### Repository Structure
+*   `protocol/`: Formal specification of the ZMQ protocol.
+*   `src/haskell/`: The authoritative game server (Haskell).
+*   `src/python/`: Reference implementation of the logic, server, and basic bots.
+*   `src/cpp/`: High-performance clients (Console and Vulkan/3D).
+*   `src/csharp/`: Graphical clients in .NET and MonoGame.
+*   `src/nodejs/`: Web client implementation.
+*   `src/rust/`: Experimental client in Rust.
 
-## 🚀 Como Começar
+## 🚀 Getting Started
 
-### Requisitos
-*   **Python:** 3.8+ (para lógica principal e scripts de referência).
-*   **ZeroMQ:** Necessário para a comunicação entre todas as implementações.
-*   **Ferramentas por linguagem:** GHC/Cabal (Haskell), CMake (C++), Node/NPM, etc.
+### Requirements
+*   **Python:** 3.8+ (for core logic and reference scripts).
+*   **ZeroMQ:** Required for communication across all implementations.
+*   **Language-specific tools:** GHC/Cabal (Haskell), CMake (C++), Node/NPM, etc.
 
-### Executando a Referência em Python
-1.  Navegue até `src/python/common` e garanta que as dependências estejam instaladas.
-2.  Inicie o servidor: `python src/python/server/server.py`
-3.  Conecte um bot: `python src/python/bot/random_bot.py`
+### Running the Python Reference
+1.  Navigate to `src/python/common` and ensure dependencies are installed.
+2.  Start the server: `python src/python/server/server.py`
+3.  Connect a bot: `python src/python/bot/random_bot.py`
 
-## 🎓 As Origens: O "Aloja"
+## 🎓 Origins: The "Aloja"
 
-King é mais do que um exercício de arquitetura de protocolo; carrega uma profunda marca pessoal. Este conjunto de regras específico foi forjado no "Aloja" (abreviação de Alojamento), uma residência estudantil onde um grupo dedicado de jogadores transformou o jogo em uma cultura de rivalidade estratégica. Como homenagem a essas raízes, os oponentes de IA que você enfrenta carregam os nomes dos próprios personagens que definiram aquela época.
+King is more than an exercise in protocol architecture; it carries a deep personal mark. This specific ruleset was forged in the "Aloja" (short for *Alojamento*), a student residence where a dedicated group of players turned the game into a culture of strategic rivalry. As a tribute to these roots, the AI opponents you face carry the names of the characters who defined that era.
 
-## 🤝 Contribuições
+## 🤝 Contributions
 
-Contribuições de todos os tipos são bem-vindas! Seja uma nova implementação de cliente, correções no servidor Haskell ou melhorias na documentação do protocolo.
+Contributions of all kinds are welcome! Whether it's a new client implementation, fixes for the Haskell server, or improvements to the protocol documentation.
 
-*Veja o [CONTRIBUTING.md](CONTRIBUTING.md) (em breve) para detalhes.*
+*See [CONTRIBUTING.md](CONTRIBUTING.md) (coming soon) for details.*
 
 ---
 
-**Nota sobre Licenciamento:** A maior parte dos ativos e código é fornecida sob a licença MIT. Alguns ativos gráficos nas implementações de clientes são usados com permissão ou como placeholders (veja os READMEs internos dos clientes para avisos específicos).
+**Licensing Note:** Most assets and code are provided under the MIT license. Some graphical assets in client implementations are used with permission or as placeholders (see internal client READMEs for specific disclaimers).
