@@ -1,119 +1,127 @@
-// Include required modules and initialize them
-var zmq = require('zeromq');
-var express = require('express');
-var app = express();
-var server = require('http').createServer(app);
-var io = require('socket.io')(server);
+const zmq = require("zeromq");
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 
-// Initialize the two main sockets (REQ/REP and PUB/SUB) for ZeroMQ
-// TODO: Error Handling on connection failure
-// TODO: Load URL from config file
-// TODO: Route the channel messages
-var info = zmq.socket('sub');
-info.connect('tcp://127.0.0.1:5556');
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-// Subscribe to everything since we handle filters with socket.io rooms
-info.subscribe('');
+// ZMQ Connection settings
+const ZMQ_REQ_ADDR = "tcp://127.0.0.1:5555";
+const ZMQ_SUB_ADDR = "tcp://127.0.0.1:5556";
 
-// Setup Subscribe channel handler (very simple, just filter based on rooms)
-info.on('message', function(topic, data) {
-    // For some reason, data is empty and all message is on topic
-    var msg = topic.toString();
-    console.log('[SUBSCRIPTION] '+ msg);
-    // data always follows format TABLE MSG *CONTENTS (contents cardinality is 0..*)
-    var args = msg.split(' ');
-    io.to(args[0]).emit('info', args.slice(1).join(' '));
-});
+/**
+ * Handle asynchronous subscriptions from ZeroMQ
+ */
+async function runSubscriptionHandler() {
+    const sock = new zmq.Subscriber();
+    sock.connect(ZMQ_SUB_ADDR);
+    sock.subscribe(""); // Subscribe to all topics
 
+    console.log(`[ZMQ] Subscribed to updates on ${ZMQ_SUB_ADDR}`);
 
-// Set up client specific behavior during handle of client connection
-io.on('connection', function(client){
-    console.log(`Client ${client.id} connected ...`);
-
-    var server = zmq.socket('req');
-    server.connect('tcp://127.0.0.1:5555');
-    client.server = server;
-
-    // Setup handler for client disconnection
-    client.on('disconnect', function(){
-        if (client.table && client.server) {
-            // Try to gracefuly leave the table on ZMQ server
-            client.server.once('response', function(response) {
-                if (response.toString() !== 'ACK') {
-                    console.log('ERROR LEAVING TABLE ON DISCONNECTION!!!');
-                }
-            });
-            client.server.send(`LEAVE ${client.user} ${client.secret}`);
+    try {
+        for await (const [topic] of sock) {
+            const msg = topic.toString();
+            console.log(`[SUBSCRIPTION] ${msg}`);
+            
+            // Format: TABLE MSG *CONTENTS
+            const args = msg.split(" ");
+            const tableId = args[0];
+            const content = args.slice(1).join(" ");
+            
+            // Broadcast to the specific table room in Socket.io
+            io.to(tableId).emit("info", content);
         }
-        console.log(`Client ${client.id} has disconnected.`);
+    } catch (err) {
+        console.error(`[ZMQ SUB ERROR] ${err}`);
+    }
+}
+
+/**
+ * Socket.io Connection Handler
+ */
+io.on("connection", (socket) => {
+    console.log(`Client ${socket.id} connected`);
+
+    // Each client gets its own REQ socket for ZeroMQ
+    const zmqReq = new zmq.Request();
+    zmqReq.connect(ZMQ_REQ_ADDR);
+
+    socket.on("disconnect", async () => {
+        if (socket.table && socket.user && socket.secret) {
+            console.log(`Client ${socket.id} disconnected, leaving table ${socket.table}`);
+            try {
+                await zmqReq.send(`LEAVE ${socket.user} ${socket.secret}`);
+                // We don't strictly wait for response on disconnect to avoid hanging
+            } catch (err) {
+                console.error(`Error sending LEAVE on disconnect: ${err}`);
+            }
+        }
+        console.log(`Client ${socket.id} disconnected`);
     });
 
     // Handle action messages (REQ/REP)
-    client.on('action', function(data) {
+    socket.on("action", async (data) => {
+        console.log(`${socket.id} requested: ${data}`);
 
-        // Here is where ZMQ and Socket.io talk with each other
-        console.log(`${client.id} requested ${data}`);
+        const args = data.split(" ");
+        const command = args[0];
 
-        // SPECIAL HANDLING OF MESSAGES JOIN and LEAVE
-        var arr = data.split(' ', 4);
-        // User requested a join, if answer is 'ACK', it was successfull
-        if (arr.length > 3 && arr[0] === 'JOIN') {
-            // Handles special situation where player attempts to join a table
-            // We temporarily join room so we don't miss any events on that table
-            client.table = arr[3];
-            client.user = arr[1];
-            client.joinning = true;
-
-            client.join(client.table);
-            console.log(`${client.id} joins ${client.table}`);
-        }
-        else if (arr.length > 2 && arr[0] === 'LEAVE') {
-            client.leaving = true;
-        } else if (arr.length == 1 && arr[0] === 'LISTUSERS') {
-            // Route the user-list-channel messages
-            client.join('user-list-channel')
+        // Process special commands for room management
+        if (command === "JOIN" && args.length > 3) {
+            socket.user = args[1];
+            socket.table = args[3];
+            socket.pendingJoin = true;
+            socket.join(socket.table);
+            console.log(`${socket.id} joining room ${socket.table}`);
+        } else if (command === "LEAVE") {
+            socket.pendingLeave = true;
+        } else if (command === "LISTUSERS") {
+            socket.join("user-list-channel");
         }
 
-        // Setup an event listener to handle the ZMQ server response
-        client.server.once('message', function(response) {
-            console.log(`Server response was ${response}`);
-            // Special handling for JOIN message
-            if (client.table && client.joinning) {
-                // Leave Socket.io room if answer was not ACK
-                if (response.toString().startsWith('ERROR')) {
-                    console.log(`${client.id} failed to join or leaves ${client.table}`);
-                    client.leave(client.table);
+        try {
+            await zmqReq.send(data);
+            const [response] = await zmqReq.receive();
+            const respStr = response.toString();
+            console.log(`Server response: ${respStr}`);
 
-                    delete client.table;
+            // Update room state based on response
+            if (socket.pendingJoin) {
+                if (respStr.startsWith("ERROR")) {
+                    socket.leave(socket.table);
+                    delete socket.table;
                 } else {
-                    client.secret = response.toString()
+                    socket.secret = respStr;
                 }
-
-                delete client.joinning;
-            }
-            // Final stage of LEAVE message
-            else if (client.leaving) {
-                client.leave(client.table);
-                delete client.leaving;
+                delete socket.pendingJoin;
+            } else if (socket.pendingLeave) {
+                socket.leave(socket.table);
+                delete socket.table;
+                delete socket.pendingLeave;
             }
 
-            // Send the response back to client
-            client.emit('response', response.toString());
-        });
-
-        // Send the request to the ZMQ server
-        client.server.send(data);
+            socket.emit("response", respStr);
+        } catch (err) {
+            console.error(`[ZMQ REQ ERROR] ${err}`);
+            socket.emit("response", "ERROR: Server communication failed");
+        }
     });
 });
 
-// Make static css and js files available
-app.use(express.static('public'));
-app.use('/graphics', express.static('graphics'));
+// Middleware & Static Assets
+app.use(express.static("public"));
+app.use("/graphics", express.static("graphics"));
 
-// Simple express routing to provide client side page
-app.get('/', function(req, res) {
-    res.sendFile(__dirname + '/index.html');
+app.get("/", (req, res) => {
+    res.sendFile(__dirname + "/index.html");
 });
 
-// Listen on port 8080
-server.listen(8086);
+// Start the application
+const PORT = 8086;
+server.listen(PORT, () => {
+    console.log(`NodeJS Proxy listening on http://localhost:${PORT}`);
+    runSubscriptionHandler().catch(console.error);
+});
