@@ -1,5 +1,11 @@
 
+import sys
+import os
 from pymongo import MongoClient
+
+# Add common directory to path to find MONGODB.py
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'common')))
+
 from MONGODB import *
 
 def authenticate_player(name, password):

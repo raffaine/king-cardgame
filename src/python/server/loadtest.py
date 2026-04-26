@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 import sys
+import os
 import atexit
 import time
 import subprocess
+
+# Add client directory to path to find client.py
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'client')))
 import client
 
 NUM_CLIENTS = 4
 SPAWN_RATE = 600 #PER MINUTE
 
-SERVER = "server.py"
-CLIENT = "random_bot.py"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SERVER = os.path.join(BASE_DIR, "server.py")
+CLIENT = os.path.join(BASE_DIR, "..", "bot", "random_bot.py")
 PYTHON_EXEC = sys.executable if sys.platform != 'win32' else "python.exe"
 SERVER_PROC = None
 CLIENTS = []

@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 
 import sys
+import os
 import random
+
+# Add client directory to path to find client.py
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'client')))
+
 import client
 
 class RandomPlayer(client.GamePlayer):

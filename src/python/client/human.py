@@ -5,6 +5,10 @@
 import sys
 import os
 import time
+
+# Ensure the client directory is in the path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import client
 
 USR_NAME = ''

@@ -5,7 +5,13 @@ import json
 import uuid
 import threading
 import zmq
+import sys
+import os
 from datetime import datetime
+
+# Add common directory to path to find king.py
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'common')))
+
 from kingdb import *
 from king import *
 
