@@ -17,6 +17,9 @@ build/
 ## Python ignores
 *.pyc
 
+## Rust
+target/
+
 ## VS and VS Code ignores
 *.log
 *.exe
