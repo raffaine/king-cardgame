@@ -1,86 +1,59 @@
-﻿King
-====
+# King: Um Ecossistema Aberto de Jogo de Cartas Multiplayer
 
-As regras para o jogo podem ser lidas em
-<https://en.wikipedia.org/wiki/King_(card_game)>.
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Protocol](https://img.shields.io/badge/Protocol-ZMQ-green.svg)](protocol/)
 
-Três alterações foram feitas com base na experiência de jogo:
- - Não existe ordem para as mãos, os jogadores tem liberdade para 
- escolher a melhor mão
-	- Observando que cada jogador só pode escolher uma positiva (a 
-	não ser que não exista outra opção)
- - Não existem Positivas decrescentes onde os jogadores começam com o 
- máximo e vão perdendo pontos
- - Ao final da Positiva onde um lance foi eleito vencedor, o valor do 
-lance será efetivado mesmo que isso force o jogador a pontuar negativamente
-  - (TODO) Servidor oferece uma opção para mesas onde lances são efetivados
-apenas até o limite do jogador não pontuar, efetivamente um calote.
- - Na mão "No King of Hearts", traduzido como "King", o jogador não é 
- obrigado a jogar o Rei de Copas quando a rodada iniciou com Copas.
-	- Caso o jogador tenha que descartar e este possui o Rei de 
-	Copas, ele deve jogá-lo.
+King é um jogo de vazas altamente estratégico, construído sobre um protocolo de comunicação aberto e agnóstico a linguagem. Este repositório serve como a implementação de referência para o ecossistema **Public King**, apresentando um servidor autoritativo e uma diversidade de clientes e agentes de IA.
 
-Os arquivos do jogo podem ser descritos como:
+## 🃏 O Jogo
 
-  + king.py :: Implementa as regras do jogo
-  + server.py :: Representa um servidor de mesas de King
-  + client.py :: Arquivo base para clientes humanos ou bots
-  + random_bot.py :: Um cliente que realiza todas as ações de forma aleatória
-  + human.py :: Cliente usado por jogadores humanos, baseado no client.py
+As regras básicas do jogo podem ser consultadas na [Wikipédia](https://en.wikipedia.org/wiki/King_(card_game)).
 
-Requerimentos Mínimos
----------------------
+Em sua essência, King é um jogo de objetivos em constante mudança. Uma partida é dividida em duas fases:
+1.  **Rodadas Negativas (Penalidades):** Os jogadores buscam evitar fazer vazas, pegar copas ou o Rei de Copas para não perder pontos.
+2.  **Rodadas Positivas (Lances):** Os jogadores fazem lances e competem para garantir pontos através de jogo estratégico.
 
-Estes requisitos representam o ambiente onde todos os testes foram bem
-sucedidos.
+### As Regras de Engajamento (O "Aloja")
+Esta implementação segue um conjunto de regras refinado e focado na agência do jogador, baseado em extensa experiência de jogo nas residências estudantis (o "Aloja"). As principais mudanças em relação ao King tradicional incluem:
+*   **Escolha Dinâmica de Rodadas:** Removemos a sequência rígida e tradicional de mãos. Os jogadores têm liberdade absoluta para escolher qual mão jogar com base em suas cartas iniciais.
+*   **Lances Estritos:** Resoluções precisas de lances e mecânicas de descarte sutis (especialmente para o Rei de Copas) transformam cada partida em uma batalha de planejamento estrutural.
+*   **Estratégia do Rei:** Na mão de "No King of Hearts" (ou simplesmente "King"), o jogador não é obrigado a jogar o Rei de Copas quando a rodada inicia com Copas, a menos que seja sua única opção de descarte.
 
-  + Python :: v3.4.2
-  + ZeroMQ (0mq) Python Library :: v4.0.5
+## 🏗️ Arquitetura & Protocolo
 
-Informações sobre os Clientes
------------------------------
+O Public King foi projetado para ser um playground poliglota. O servidor e os clientes se comunicam através de um protocolo formalizado baseado em **ZeroMQ (ZMQ)**, permitindo que qualquer pessoa construa seu próprio cliente ou agente de IA em qualquer linguagem.
 
-Estes requisitos representam os ambientes e linguagens atualmente suportadas, 
-suporte este podendo variar de oferta de um cliente base ou apenas stubs exemplo
-para comunicação efetiva com servidor.
+### Estrutura do Repositório
+*   `protocol/`: Especificação formal do protocolo ZMQ.
+*   `src/haskell/`: O servidor de jogo autoritativo (Haskell).
+*   `src/python/`: Implementação de referência da lógica, servidor e bots básicos.
+*   `src/cpp/`: Clientes de alta performance (Console e Vulkan/3D).
+*   `src/csharp/`: Clientes gráficos em .NET e MonoGame.
+*   `src/nodejs/`: Implementação de cliente para web.
+*   `src/rust/`: Cliente experimental em Rust.
 
-* NodeJS **(Em desenvolvimento)**
- + Dependencias estão listadas no arquivo package.json, para instalar as dependências
-rode o comando abaixo no diretório do cliente.
-    npm install
- + Devido a falta de experiência no ambiente altamente baseado em eventos do NodeJS,
-não sei ao certo se existe execução em paralelo ou threads. O código foi escrito
-assumindo que isso não é o caso.
- + O cliente NodeJS produz um servidor WebSocket e entrega a página para o navegador,
-sendo esta página o local onde a lógica de interação com o servidor ZeroMQ esta definida.
+## 🚀 Como Começar
 
-* C# Console **(Não Testado)**
-   + RabbitMQ .NET Client v3.0.1 (Adicionado como um submodule do repositorio)
-   + Adicionar a referencia a DLL RabbitMQ.Client.dll na Solution
+### Requisitos
+*   **Python:** 3.8+ (para lógica principal e scripts de referência).
+*   **ZeroMQ:** Necessário para a comunicação entre todas as implementações.
+*   **Ferramentas por linguagem:** GHC/Cabal (Haskell), CMake (C++), Node/NPM, etc.
 
-* C# Win 8 Store (Passivel de expansao para outras plataformas) **(Não Testado)**
-   + RabbitMQ .NET Client, incluido como submodulo do repositorio, deve
-   ser alterado o IContentHeader.cs para nao derivar de ICloneable, sendo
-   necessario adicionar o metdodo "object Clone()" na interface.
-   + MonoGame v3.0 (BETA), nao adicionei como submodulo, entao recomendo
-   instalar e adicionar a referencia que estiver faltando.
-   + **DISCLAIMER**: cards.png foi retirado do site: 
-   http://math.hws.edu/javanotes/c13/s1.html
-   + **DISCLAIMER**: Os logos da aplicacao estao usando a imagem retirada
-   dos sites: http://gamebanana.com/sprays/38097
-   e http://www.behance.net/gallery/King-of-Hearts/424990
-   + **DISCLAIMER**: A imagem de fundo da mesa, foi retirada do site:
-   http://graphics.ucsd.edu/courses/rendering/2008/tkim/
-   + **DISCLAIMER**: Como nao tenho VS2010 para gerar minhas proprias
-   fontes, utilizei uma fonte que encontrei em um dos Samples da
-   MonoGame: https://github.com/CartBlanche/MonoGame-Samples
+### Executando a Referência em Python
+1.  Navegue até `src/python/common` e garanta que as dependências estejam instaladas.
+2.  Inicie o servidor: `python src/python/server/server.py`
+3.  Conecte um bot: `python src/python/bot/random_bot.py`
 
-* C++ Console **(Não Testado)**
-   + RabbitMQ C Client (Libs\DLLs do Windows incluidas no Repositorio),
-   fontes disponiveis em: https://github.com/alanxz/rabbitmq-c
-   + RabbitMQ C++ Wrapper (Libs\DLLs do Windows incluidas no
-   Repositorio), fontes disponíveis em:
-   https://github.com/alanxz/SimpleAmqpClient
-   + Boost 1.47.0 or newer (DLLs incluidas no repositorio, da versao
-   1.51.0, por comodidade) deve ser feito download e build da boost
-   pelo site: http://www.boost.org/
+## 🎓 As Origens: O "Aloja"
+
+King é mais do que um exercício de arquitetura de protocolo; carrega uma profunda marca pessoal. Este conjunto de regras específico foi forjado no "Aloja" (abreviação de Alojamento), uma residência estudantil onde um grupo dedicado de jogadores transformou o jogo em uma cultura de rivalidade estratégica. Como homenagem a essas raízes, os oponentes de IA que você enfrenta carregam os nomes dos próprios personagens que definiram aquela época.
+
+## 🤝 Contribuições
+
+Contribuições de todos os tipos são bem-vindas! Seja uma nova implementação de cliente, correções no servidor Haskell ou melhorias na documentação do protocolo.
+
+*Veja o [CONTRIBUTING.md](CONTRIBUTING.md) (em breve) para detalhes.*
+
+---
+
+**Nota sobre Licenciamento:** A maior parte dos ativos e código é fornecida sob a licença MIT. Alguns ativos gráficos nas implementações de clientes são usados com permissão ou como placeholders (veja os READMEs internos dos clientes para avisos específicos).
