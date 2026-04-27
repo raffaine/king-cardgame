@@ -3,6 +3,10 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/Protocol-ZMQ-green.svg)](protocol/)
 
+**ARCHIVED REPO**: Development has Moved to [Sintropia Studios](https://github.com/SintropiaStudios/king-cardgame).
+
+---
+
 King is a highly strategic, trick-taking card game built on an open, language-agnostic communication protocol. This repository serves as the reference implementation for the **Public King** ecosystem, featuring an authoritative server and a diverse range of clients and AI agents.
 
 ## 🃏 The Game
